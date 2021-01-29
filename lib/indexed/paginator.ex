@@ -49,13 +49,12 @@ defmodule Indexed.Paginator do
     # of records is expensive so it is capped by default. Can be set to `:infinity`
     # in order to count all the records. Defaults to `10,000`.
 
-    * `:filter_fn` - An optional function which takes a record and returns a
+    * `:filter` - An optional function which takes a record and returns a
       boolean -- true if the record is desired in pagination.
   """
-  @spec paginate([id], fun, keyword | map) :: Page.t()
+  @spec paginate([id], fun, keyword) :: Page.t()
   def paginate(ordered_ids, record_getter, opts \\ []) do
-    filter_fn = opts[:filter_fn]
-    opts = Keyword.new(opts)
+    filter = opts[:filter]
     config = Config.new(Keyword.merge(@config, opts))
 
     Config.validate!(config)
@@ -67,14 +66,14 @@ defmodule Indexed.Paginator do
       cond do
         cursor_before_in ->
           cursor_id = cursor_before_in[:id]
-          collect_before(record_getter, ordered_ids, config, filter_fn, cursor_id)
+          collect_before(record_getter, ordered_ids, config, filter, cursor_id)
 
         cursor_after_in ->
           cursor_id = cursor_after_in[:id]
-          collect_after(record_getter, ordered_ids, config, filter_fn, cursor_id)
+          collect_after(record_getter, ordered_ids, config, filter, cursor_id)
 
         true ->
-          collect_after(record_getter, ordered_ids, config, filter_fn, nil)
+          collect_after(record_getter, ordered_ids, config, filter, nil)
       end
 
     %Page{
@@ -90,13 +89,13 @@ defmodule Indexed.Paginator do
   end
 
   # Build `{records, count}` for the items preceeding and not including the
-  # record with id `id`. Only records where `filter_fn/1` returns true will be
+  # record with id `id`. Only records where `filter/1` returns true will be
   # included.
   @spec collect_before(fun, [id], Config.t(), fun, id | nil) ::
           {records :: [record], count :: integer, cursor_before :: String.t(),
            cursor_after :: String.t()}
-  defp collect_before(record_getter, ordered_ids, config, filter_fn, cursor_id) do
-    filter_fn = filter_fn || fn _ -> true end
+  defp collect_before(record_getter, ordered_ids, config, filter, cursor_id) do
+    filter = filter || fn _ -> true end
 
     prev_ids_revd =
       Enum.reduce_while(ordered_ids, [], fn
@@ -108,7 +107,7 @@ defmodule Indexed.Paginator do
       Enum.reduce_while(prev_ids_revd, {[], 0, false, nil}, fn id,
                                                                {acc, count, false, cursor_after} ->
         record = record_getter.(id)
-        {acc, count} = if filter_fn.(record), do: {[record | acc], count + 1}, else: {acc, count}
+        {acc, count} = if filter.(record), do: {[record | acc], count + 1}, else: {acc, count}
 
         cursor_after =
           case acc do
@@ -127,19 +126,19 @@ defmodule Indexed.Paginator do
     {records, count, cursor_before, cursor_after}
   end
 
-  # Scan ids until cursor, then collect items where `filter_fn/1` returns true,
+  # Scan ids until cursor, then collect items where `filter/1` returns true,
   # until limit. If `cursor_id` is nil, then we are on the first page.
   @spec collect_after(fun, [id], Config.t(), fun, id | nil) ::
           {records :: [record], count :: integer, cursor_before :: String.t() | nil,
            cursor_after :: String.t() | nil}
-  defp collect_after(record_getter, ordered_ids, config, filter_fn, cursor_id) do
-    filter_fn = filter_fn || fn _ -> true end
+  defp collect_after(record_getter, ordered_ids, config, filter, cursor_id) do
+    filter = filter || fn _ -> true end
 
     eat = fn id, acc, read_ids, count, cursor_before ->
       record = record_getter.(id)
 
       {acc, count} =
-        if filter_fn.(record),
+        if filter.(record),
           do: {[record | acc], count + 1},
           else: {acc, count}
 
@@ -149,7 +148,7 @@ defmodule Indexed.Paginator do
       cursor_before =
         if false == cursor_before and match?([_], acc),
           do:
-            Enum.any?(read_ids, &filter_fn.(record_getter.(&1))) &&
+            Enum.any?(read_ids, &filter.(record_getter.(&1))) &&
               cursor_for_record(hd(acc), config.cursor_fields),
           else: cursor_before
 

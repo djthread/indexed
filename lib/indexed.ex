@@ -49,7 +49,7 @@ defmodule Indexed do
       fields = opts[:fields] || []
 
       # Data sub-options indicate the ordering data already has on the way in.
-      {data_field, data_dir, data} = resolve_data_opt(opts[:data], entity, fields)
+      {data_dir, data_field, data} = resolve_data_opt(opts[:data], entity, fields)
 
       ref = :ets.new(entity, @ets_opts)
 
@@ -83,8 +83,6 @@ defmodule Indexed do
     do: raise("Bad input data direction for #{entity}: #{d}")
 
   defp resolve_data_opt(data, _, _) when is_list(data), do: {nil, nil, data}
-
-  defp resolve_data_opt(nil, _, _), do: {nil, nil, nil}
 
   # Create the asc and desc indexes for one field.
   # If the data is already ordered for this field, we can avoid deep sorting.
@@ -136,12 +134,17 @@ defmodule Indexed do
   end
 
   @doc "Get a list of all cached entities of a certain type."
-  @spec get_values(Index.t(), atom) :: [record]
-  def get_values(index, entity) do
-    index.refs
-    |> Map.fetch!(entity)
-    |> :ets.tab2list()
-    |> Enum.map(fn {_id, struct} -> struct end)
+  @spec get_values(Index.t(), atom, atom, :asc | :desc) :: [record]
+  def get_values(index, entity, order_field, order_direction) do
+    id_keyed_map =
+      index.refs
+      |> Map.fetch!(entity)
+      |> :ets.tab2list()
+      |> Map.new()
+
+    key = index_key(entity, order_field, order_direction)
+
+    Enum.map(get_index(index, key), &id_keyed_map[&1])
   end
 
   # Insert a record into the cached data. (Indexes still need updating.)
@@ -216,17 +219,17 @@ defmodule Indexed do
   end
 
   @doc "Handle a pagination request by invoking `DrugMule.Paginator`."
-  @spec paginate(Index.t(), atom, map) :: Paginator.Page.t()
+  @spec paginate(Index.t(), atom, keyword) :: Paginator.Page.t()
   def paginate(index, entity, params) do
-    order_direction = params.order_direction
-    order_field = params.order_field
+    order_direction = params[:order_direction]
+    order_field = params[:order_field]
     cursor_fields = [{order_field, order_direction}]
     ordered_ids = get_index(index, index_key(entity, order_field, order_direction))
 
-    filter_fn = fn _record -> true end
+    filter = fn _record -> true end
     getter = fn id -> get(index, entity, id) end
 
-    paginator_opts = Map.merge(params, %{cursor_fields: cursor_fields, filter_fn: filter_fn})
+    paginator_opts = Keyword.merge(params, cursor_fields: cursor_fields, filter: filter)
 
     Indexed.Paginator.paginate(ordered_ids, getter, paginator_opts)
   end

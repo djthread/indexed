@@ -96,12 +96,12 @@ defmodule Indexed.PaginatorTest do
   end
 
   test "can filter" do
-    filter_fn = fn
+    filter = fn
       %{x: "h" <> _} -> false
       _ -> true
     end
 
     assert %Paginator.Page{entries: [%{x: "ox"}, %{x: "za"}]} =
-             paginate(@ordered_ids, &getter/1, opts(filter_fn: filter_fn))
+             paginate(@ordered_ids, &getter/1, opts(filter: filter))
   end
 end
