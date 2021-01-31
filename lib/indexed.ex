@@ -159,28 +159,15 @@ defmodule Indexed do
     :ets.insert(index.index_ref, {index_name, id_list})
   end
 
-  @doc "Update the cached data and index to reflect a new record being created."
-  @spec add_record(Index.t(), atom, record) :: :ok
-  def add_record(index, entity, record) do
-    put(index, entity, record)
-
-    Enum.each(index.fields[entity] || [], fn field ->
-      desc_key = index_key(entity, field, :desc)
-      desc_ids = index |> get_index(desc_key) |> insert_by(record, entity, field, index)
-      put_index(index, desc_key, desc_ids)
-      put_index(index, index_key(entity, field, :asc), Enum.reverse(desc_ids))
-    end)
-  end
-
   @doc """
-  Update the cached data and index to reflect a record being updated.
+  Add or update a record, along with the indexes to reflect the change.
 
   If it is known for sure whether or not the record was previously held in
   cache, include the `already_held?` argument to speed the operation
   slightly.
   """
-  @spec update_record(Index.t(), atom, record, boolean | nil) :: :ok
-  def update_record(index, entity, record, already_held? \\ nil) do
+  @spec set_record(Index.t(), atom, record, boolean | nil) :: :ok
+  def set_record(index, entity, record, already_held? \\ nil) do
     fields = Map.fetch!(index.fields, entity)
 
     already_held? =

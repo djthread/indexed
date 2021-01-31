@@ -14,7 +14,7 @@ defmodule IndexedTest do
     [index: Indexed.warm(cars: [fields: [:make], data: {:asc, :make, @cars}])]
   end
 
-  defp add_tesla(index), do: Indexed.add_record(index, :cars, %Car{id: 3, make: "Tesla"})
+  defp add_tesla(index), do: Indexed.set_record(index, :cars, %Car{id: 3, make: "Tesla"}, false)
 
   test "get", %{index: index} do
     assert %Car{id: 1, make: "Lamborghini"} == Indexed.get(index, :cars, 1)
@@ -26,33 +26,28 @@ defmodule IndexedTest do
              Indexed.get_values(index, :cars, :make, :asc)
   end
 
-  describe "update_record" do
+  describe "set_record" do
     test "without already_held? hint, but it is already held", %{index: index} do
       car = Indexed.get(index, :cars, 1)
-      Indexed.update_record(index, :cars, %{car | make: "Lambo"})
+      Indexed.set_record(index, :cars, %{car | make: "Lambo"})
       assert %Car{id: 1, make: "Lambo"} == Indexed.get(index, :cars, 1)
     end
 
     test "without already_held? hint, but it is not already held", %{index: index} do
-      Indexed.update_record(index, :cars, %Car{id: 4, make: "GM"})
+      Indexed.set_record(index, :cars, %Car{id: 4, make: "GM"})
       assert %Car{id: 4, make: "GM"} == Indexed.get(index, :cars, 4)
     end
 
     test "with already_held? hint, true", %{index: index} do
       car = Indexed.get(index, :cars, 1)
-      Indexed.update_record(index, :cars, %{car | make: "Lambo"}, true)
+      Indexed.set_record(index, :cars, %{car | make: "Lambo"}, true)
       assert %Car{id: 1, make: "Lambo"} == Indexed.get(index, :cars, 1)
     end
 
     test "with already_held? hint, false", %{index: index} do
-      Indexed.update_record(index, :cars, %Car{id: 5, make: "Ford"}, false)
+      Indexed.set_record(index, :cars, %Car{id: 5, make: "Ford"}, false)
       assert %Car{id: 5, make: "Ford"} == Indexed.get(index, :cars, 5)
     end
-  end
-
-  test "add_record", %{index: index} do
-    add_tesla(index)
-    %Car{id: 3, make: "Tesla"} = Indexed.get(index, :cars, 3)
   end
 
   test "paginate", %{index: index} do
