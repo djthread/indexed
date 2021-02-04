@@ -91,7 +91,7 @@ defmodule Indexed.Paginator do
   # Build `{records, count}` for the items preceeding and not including the
   # record with id `id`. Only records where `filter/1` returns true will be
   # included.
-  @spec collect_before(fun, [id], Config.t(), fun, id | nil) ::
+  @spec collect_before(fun, [id], Config.t(), fun | nil, id | nil) ::
           {records :: [record], count :: integer, cursor_before :: String.t(),
            cursor_after :: String.t()}
   defp collect_before(record_getter, ordered_ids, config, filter, cursor_id) do

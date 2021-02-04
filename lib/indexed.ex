@@ -125,11 +125,18 @@ defmodule Indexed do
   end
 
   @doc "Get an index data structure."
-  @spec get_index(Index.t(), String.t()) :: [id]
+  @spec get_index(
+          Index.t(),
+          {entity :: atom, field :: atom, direction :: :asc | :desc} | String.t()
+        ) :: [id]
+  def get_index(index, {entity, field, direction}) do
+    get_index(index, index_key(entity, field, direction))
+  end
+
   def get_index(index, index_name) do
     case :ets.lookup(index.index_ref, index_name) do
       [{^index_name, val}] -> val
-      [] -> nil
+      [] -> raise "No such index: #{index_name}"
     end
   end
 
