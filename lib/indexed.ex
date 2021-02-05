@@ -8,6 +8,8 @@ defmodule Indexed do
 
   @ets_opts [read_concurrency: true]
 
+  defdelegate paginate(index, entity, params), to: Indexed.Paginator
+
   defmodule Index do
     @moduledoc """
     A struct defining a cache, including references to its ETS tables.
@@ -103,9 +105,9 @@ defmodule Indexed do
     :ets.insert(ref, {index_key(entity, field, :desc), Enum.reverse(asc_ids)})
   end
 
-  # Cache key for a given entity, field, direction.
+  @doc "Cache key for a given entity, field, direction."
   @spec index_key(atom, atom, :asc | :desc) :: String.t()
-  defp index_key(entity, field, direction) do
+  def index_key(entity, field, direction) do
     "#{entity}_#{field}_#{direction}"
   end
 
@@ -210,21 +212,5 @@ defmodule Indexed do
       end)
 
     List.insert_at(old_desc_ids, first_smaller_idx || -1, record.id)
-  end
-
-  @doc "Handle a pagination request by invoking `DrugMule.Paginator`."
-  @spec paginate(Index.t(), atom, keyword) :: Paginator.Page.t()
-  def paginate(index, entity, params) do
-    order_direction = params[:order_direction]
-    order_field = params[:order_field]
-    cursor_fields = [{order_field, order_direction}]
-    ordered_ids = get_index(index, index_key(entity, order_field, order_direction))
-
-    filter = fn _record -> true end
-    getter = fn id -> get(index, entity, id) end
-
-    paginator_opts = Keyword.merge(params, cursor_fields: cursor_fields, filter: filter)
-
-    Indexed.Paginator.paginate(ordered_ids, getter, paginator_opts)
   end
 end

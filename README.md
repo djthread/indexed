@@ -62,17 +62,41 @@ Indexed.set_record(index, :cars, %Car{id: 3, make: "Tesla"}, false)
 
 %Car{id: 3, make: "Tesla"} = Indexed.get(index, :cars, 3)
 
+# Next, let's look at the paginator capability...
+
+after_cursor = "g3QAAAACZAACaWRhAmQABG1ha2VtAAAABU1hemRh"
+
 %Paginator.Page{
   entries: [
     %Car{id: 3, make: "Tesla"},
     %Car{id: 2, make: "Mazda"}
   ],
   metadata: %Paginator.Page.Metadata{
-    after: "g3QAAAABZAAEbWFrZW0AAAAFTWF6ZGE=",
+    after: ^after_cursor,
     before: nil,
     limit: 2,
-    total_count: 2,
+    total_count: nil,
     total_count_cap_exceeded: false
   }
 } = Indexed.paginate(index, :cars, limit: 2, order_field: :make, order_direction: :desc)
+
+%Paginator.Page{
+  entries: [
+    %Car{id: 1, make: "Lambo"}
+  ],
+  metadata: %Paginator.Page.Metadata{
+    after: nil,
+    before: "g3QAAAACZAACaWRhAWQABG1ha2VtAAAABUxhbWJv",
+    limit: 2,
+    total_count: nil,
+    total_count_cap_exceeded: false
+  }
+} =
+  Indexed.paginate(index, :cars,
+    after: after_cursor,
+    limit: 2,
+    total_count: nil,
+    order_field: :make,
+    order_direction: :desc
+  )
 ```

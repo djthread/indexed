@@ -42,7 +42,7 @@ defmodule Indexed.MixProject do
       # Will revert this when a new hex version is cut with my change
       # https://github.com/duffelhq/paginator/pull/96
       # {:paginator, "~> 1.0"},
-      {:paginator, github: "duffelhq/paginator"}
+      {:paginator, github: "djthread/paginator", branch: "dialyzer-fix"}
     ]
   end
 

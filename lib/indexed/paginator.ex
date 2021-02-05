@@ -29,17 +29,19 @@ defmodule Indexed.Paginator do
 
     * `:after` - Fetch the records after this cursor.
     * `:before` - Fetch the records before this cursor.
-    * `:cursor_fields` - The fields with sorting direction used to determine the
-    cursor. In most cases, this should be the same fields as the ones used for sorting in the query.
-    When you use named bindings in your query they can also be provided.
+    * `:order_direction` - either `:asc` or `:desc`
+    * `:order_field` - field atom (eg. `:updated_by`)
+    * `:filter` - An optional function which takes a record and returns a
+      boolean -- true if the record is desired in pagination.
+
     # * `:fetch_cursor_value_fun` function of arity 2 to lookup cursor values on returned records.
     # Defaults to `Paginator.default_fetch_cursor_value/2`
     # * `:include_total_count` - Set this to true to return the total number of
     # records matching the query. Note that this number will be capped by
     # `:total_count_limit`. Defaults to `false`.
     # * `:total_count_primary_key_field` - Running count queries on specified column of the table
-    * `:limit` - Limits the number of records returned per page. Note that this
-    number will be capped by `:maximum_limit`. Defaults to `50`.
+    # * `:limit` - Limits the number of records returned per page. Note that this
+    # number will be capped by `:maximum_limit`. Defaults to `50`.
     # * `:maximum_limit` - Sets a maximum cap for `:limit`. This option can be useful when `:limit`
     # is set dynamically (e.g from a URL param set by a user) but you still want to
     # enfore a maximum. Defaults to `500`.
@@ -48,12 +50,27 @@ defmodule Indexed.Paginator do
     # * `:total_count_limit` - Running count queries on tables with a large number
     # of records is expensive so it is capped by default. Can be set to `:infinity`
     # in order to count all the records. Defaults to `10,000`.
-
-    * `:filter` - An optional function which takes a record and returns a
-      boolean -- true if the record is desired in pagination.
   """
-  @spec paginate([id], fun, keyword) :: Page.t()
-  def paginate(ordered_ids, record_getter, opts \\ []) do
+  @spec paginate(Indexed.Index.t(), atom, keyword) :: Paginator.Page.t()
+  def paginate(index, entity, params) do
+    import Indexed
+
+    order_direction = params[:order_direction]
+    order_field = params[:order_field]
+    cursor_fields = [{order_field, order_direction}, {:id, :asc}]
+    ordered_ids = get_index(index, index_key(entity, order_field, order_direction))
+
+    filter = fn _record -> true end
+    getter = fn id -> get(index, entity, id) end
+
+    paginator_opts = Keyword.merge(params, cursor_fields: cursor_fields, filter: filter)
+
+    do_paginate(ordered_ids, getter, paginator_opts)
+  end
+
+  @doc ""
+  @spec do_paginate([id], fun, keyword) :: Page.t()
+  def do_paginate(ordered_ids, record_getter, opts \\ []) do
     filter = opts[:filter]
     config = Config.new(Keyword.merge(@config, opts))
 
@@ -62,7 +79,7 @@ defmodule Indexed.Paginator do
     cursor_after_in = opts[:after] && Cursor.decode(opts[:after])
     cursor_before_in = opts[:before] && Cursor.decode(opts[:before])
 
-    {records, count, cursor_before, cursor_after} =
+    {records, _count, cursor_before, cursor_after} =
       cond do
         cursor_before_in ->
           cursor_id = cursor_before_in[:id]
@@ -82,7 +99,7 @@ defmodule Indexed.Paginator do
         after: cursor_after || nil,
         before: cursor_before,
         limit: config.limit,
-        total_count: count,
+        total_count: nil,
         total_count_cap_exceeded: false
       }
     }

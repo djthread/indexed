@@ -1,8 +1,8 @@
 defmodule Indexed.PaginatorTest do
   use ExUnit.Case
-  import Indexed.Paginator, only: [paginate: 3]
+  import Indexed.Paginator, only: [do_paginate: 3]
 
-  @ordered_ids [
+  @ids_x_asc [
     "aaaa2a06-0dcf-4d9b-b2fc-31bfda45527b",
     "bbbb11e2-aa9f-4567-b869-719fa5e06bfb",
     "cccc8b25-f20b-425c-ad0c-377d8cc84356",
@@ -34,15 +34,16 @@ defmodule Indexed.PaginatorTest do
   }
 
   def opts(args \\ []) do
-    defaults = [include_total_count: true, limit: 2, order_field: :id, order_direction: :asc]
+    defaults = [include_total_count: true, limit: 2, order_field: :x, order_direction: :asc]
     args = Keyword.merge(defaults, args)
-    Keyword.put(args, :cursor_fields, [{args[:order_field], args[:order_direction]}])
+    Keyword.put(args, :cursor_fields, [{args[:order_field], args[:order_direction]}, {:id, :asc}])
   end
 
   defp getter(id), do: @entries[id]
 
-  test "can page forwards" do
-    cursor_after_1 = "g3QAAAABZAACaWRtAAAAJGJiYmIxMWUyLWFhOWYtNDU2Ny1iODY5LTcxOWZhNWUwNmJmYg=="
+  test "can page forward" do
+    cursor_after_1 =
+      "g3QAAAACZAACaWRtAAAAJGJiYmIxMWUyLWFhOWYtNDU2Ny1iODY5LTcxOWZhNWUwNmJmYmQAAXhtAAAAAmhp"
 
     assert %Paginator.Page{
              entries: [%{x: "ha"}, %{x: "hi"}],
@@ -50,49 +51,53 @@ defmodule Indexed.PaginatorTest do
                after: ^cursor_after_1,
                before: nil,
                limit: 2,
-               total_count: 2,
+               total_count: nil,
                total_count_cap_exceeded: false
              }
-           } = paginate(@ordered_ids, &getter/1, opts())
+           } = do_paginate(@ids_x_asc, &getter/1, opts())
 
-    cursor_after_2 = "g3QAAAABZAACaWRtAAAAJGRkZGQ0M2JmLTA1ZjAtNDAzYi1hZDliLTBkYmZhNWJhZDYzNg=="
+    cursor_after_2 =
+      "g3QAAAACZAACaWRtAAAAJGRkZGQ0M2JmLTA1ZjAtNDAzYi1hZDliLTBkYmZhNWJhZDYzNmQAAXhtAAAAAm94"
 
     assert %Paginator.Page{
              entries: [%{x: "ho"}, %{x: "ox"}],
              metadata: %Paginator.Page.Metadata{
                after: ^cursor_after_2,
-               before: "g3QAAAABZAACaWRtAAAAJGNjY2M4YjI1LWYyMGItNDI1Yy1hZDBjLTM3N2Q4Y2M4NDM1Ng==",
+               before:
+                 "g3QAAAACZAACaWRtAAAAJGNjY2M4YjI1LWYyMGItNDI1Yy1hZDBjLTM3N2Q4Y2M4NDM1NmQAAXhtAAAAAmhv",
                limit: 2,
-               total_count: 2,
+               total_count: nil,
                total_count_cap_exceeded: false
              }
-           } = paginate(@ordered_ids, &getter/1, opts(after: cursor_after_1))
+           } = do_paginate(@ids_x_asc, &getter/1, opts(after: cursor_after_1))
+
+    last_page_before = last_page_before()
 
     assert %Paginator.Page{
              entries: [%{x: "za"}],
              metadata: %Paginator.Page.Metadata{
                after: nil,
-               before: "g3QAAAABZAACaWRtAAAAJGVlZWUxY2YxLWQwZDAtNGM3YS1iYWQxLTJjYmQyYjk4MjJiYg==",
+               before: ^last_page_before,
                limit: 2,
-               total_count: 1,
+               total_count: nil,
                total_count_cap_exceeded: false
              }
-           } = paginate(@ordered_ids, &getter/1, opts(after: cursor_after_2))
+           } = do_paginate(@ids_x_asc, &getter/1, opts(after: cursor_after_2))
   end
 
-  test "can page backwards" do
-    cursor_before = "g3QAAAABZAACaWRtAAAAJGVlZWUxY2YxLWQwZDAtNGM3YS1iYWQxLTJjYmQyYjk4MjJiYg=="
-
+  test "can page backward" do
     assert %Paginator.Page{
              entries: [%{x: "ho"}, %{x: "ox"}],
              metadata: %Paginator.Page.Metadata{
-               after: "g3QAAAABZAACaWRtAAAAJGRkZGQ0M2JmLTA1ZjAtNDAzYi1hZDliLTBkYmZhNWJhZDYzNg==",
-               before: "g3QAAAABZAACaWRtAAAAJGNjY2M4YjI1LWYyMGItNDI1Yy1hZDBjLTM3N2Q4Y2M4NDM1Ng==",
+               after:
+                 "g3QAAAACZAACaWRtAAAAJGRkZGQ0M2JmLTA1ZjAtNDAzYi1hZDliLTBkYmZhNWJhZDYzNmQAAXhtAAAAAm94",
+               before:
+                 "g3QAAAACZAACaWRtAAAAJGNjY2M4YjI1LWYyMGItNDI1Yy1hZDBjLTM3N2Q4Y2M4NDM1NmQAAXhtAAAAAmhv",
                limit: 2,
-               total_count: 2,
+               total_count: nil,
                total_count_cap_exceeded: false
              }
-           } = paginate(@ordered_ids, &getter/1, opts(before: cursor_before))
+           } = do_paginate(@ids_x_asc, &getter/1, opts(before: last_page_before()))
   end
 
   test "can filter" do
@@ -102,6 +107,10 @@ defmodule Indexed.PaginatorTest do
     end
 
     assert %Paginator.Page{entries: [%{x: "ox"}, %{x: "za"}]} =
-             paginate(@ordered_ids, &getter/1, opts(filter: filter))
+             do_paginate(@ids_x_asc, &getter/1, opts(filter: filter))
   end
+
+  # The before-cursor on the very last page.
+  defp last_page_before,
+    do: "g3QAAAACZAACaWRtAAAAJGVlZWUxY2YxLWQwZDAtNGM3YS1iYWQxLTJjYmQyYjk4MjJiYmQAAXhtAAAAAnph"
 end
