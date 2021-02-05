@@ -44,6 +44,8 @@ cars = [
   %Car{id: 2, make: "Mazda"}
 ]
 
+# Sidenote: for date fields, instead of an atom (`:make`) use a tuple and add
+# `:date` like `{:updated_at, :date}`.
 index =
   Indexed.warm(
     cars: [fields: [:make], data: {:asc, :make, cars}]
