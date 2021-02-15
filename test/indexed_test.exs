@@ -1,5 +1,5 @@
 defmodule Car do
-  defstruct [:id, :make]
+  defstruct [:id, :make, :inserted_at]
 end
 
 defmodule IndexedTest do
@@ -15,7 +15,7 @@ defmodule IndexedTest do
   end
 
   defp add_tesla(index),
-    do: Indexed.set_record(index, :cars, %Car{id: 3, make: "Tesla"}, new_record?: true)
+    do: Indexed.put(index, :cars, %Car{id: 3, make: "Tesla"})
 
   test "get", %{index: index} do
     assert %Car{id: 1, make: "Lamborghini"} == Indexed.get(index, :cars, 1)
@@ -27,17 +27,23 @@ defmodule IndexedTest do
              Indexed.get_values(index, :cars, :make, :asc)
   end
 
-  describe "set_record" do
-    test "without new_record? hint, but it is already held", %{index: index} do
+  describe "put" do
+    test "when already held", %{index: index} do
       car = Indexed.get(index, :cars, 1)
-      Indexed.set_record(index, :cars, %{car | make: "Lambo"})
+      Indexed.put(index, :cars, %{car | make: "Lambo"})
       assert %Car{id: 1, make: "Lambo"} == Indexed.get(index, :cars, 1)
     end
 
-    test "without new_record? hint, but it is not already held", %{index: index} do
-      Indexed.set_record(index, :cars, %Car{id: 4, make: "GM"})
+    test "when not already held", %{index: index} do
+      Indexed.put(index, :cars, %Car{id: 4, make: "GM"})
       assert %Car{id: 4, make: "GM"} == Indexed.get(index, :cars, 4)
     end
+  end
+
+  test "index_key" do
+    asc_key = "cars[]color_asc"
+    ^asc_key = Indexed.index_key("cars", "color", :asc, nil)
+    ^asc_key = Indexed.index_key("cars", "color", :asc)
   end
 
   describe "get_index" do
@@ -46,9 +52,7 @@ defmodule IndexedTest do
     end
 
     test "raise on no such index", %{index: index} do
-      assert_raise RuntimeError, fn ->
-        Indexed.get_index(index, :cars, :whoops, :desc)
-      end
+      assert is_nil(Indexed.get_index(index, :cars, :whoops, :desc))
     end
   end
 
@@ -100,16 +104,16 @@ defmodule IndexedTest do
 
     assert %Car{id: 1, make: "Lamborghini"} = car = Indexed.get(index, :cars, 1)
 
-    # `true` is a hint that the record is already held in the cache,
-    # speeding the operation a bit.
-    Indexed.set_record(index, :cars, %{car | make: "Lambo"}, already_held?: true)
+    Indexed.put(index, :cars, %{car | make: "Lambo"})
 
     assert %Car{id: 1, make: "Lambo"} = Indexed.get(index, :cars, 1)
 
-    # `false` indicates that we know for sure the car didn't exist before.
-    Indexed.set_record(index, :cars, %Car{id: 3, make: "Tesla"}, already_held?: false)
+    Indexed.put(index, :cars, %Car{id: 3, make: "Tesla"})
 
     assert %Car{id: 3, make: "Tesla"} = Indexed.get(index, :cars, 3)
+
+    assert [%Car{make: "Lambo"}, %Car{make: "Mazda"}, %Car{make: "Tesla"}] =
+             Indexed.get_values(index, :cars, :make, :asc)
 
     after_cursor = "g3QAAAACZAACaWRhAmQABG1ha2VtAAAABU1hemRh"
 
@@ -147,5 +151,40 @@ defmodule IndexedTest do
                order_field: :make,
                order_direction: :desc
              )
+  end
+
+  test "nil prefilter raises" do
+    assert_raise RuntimeError, fn ->
+      Indexed.warm(
+        cars: [
+          fields: [:hi],
+          data: [%{hi: 2}],
+          prefilters: [nil]
+        ]
+      )
+    end
+  end
+
+  test "datetime sort" do
+    cars = [
+      %Car{id: 1, make: "Lamborghini", inserted_at: ~U[2021-02-14 08:14:10.715462Z]},
+      %Car{id: 2, make: "Mazda", inserted_at: ~U[2021-02-14 08:14:15.004640Z]}
+    ]
+
+    index =
+      Indexed.warm(
+        cars: [
+          fields: [{:inserted_at, sort: :date_time}],
+          data: cars
+        ]
+      )
+
+    Indexed.put(index, :cars, %Car{
+      id: 3,
+      make: "Pinto",
+      inserted_at: ~U[2021-02-14 08:14:12.004640Z]
+    })
+
+    assert [%{id: 2}, %{id: 3}, %{id: 1}] = Indexed.get_values(index, :cars, :inserted_at, :desc)
   end
 end

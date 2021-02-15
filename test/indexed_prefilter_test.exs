@@ -74,25 +74,112 @@ defmodule IndexedPrefilterTest do
              )
   end
 
-  test "get_uniques_list", %{index: index} do
-    # This is available because prefilter field keys imply manage_uniques on
-    # the top level (prefilter nil).
-    assert ["Hospital Records", "Liquid V Recordings"] ==
-             Indexed.get_uniques_list(index, :albums, :label)
+  describe "sorted indexes by field are maintained" do
+    test "basic list with prefilter", %{index: index} do
+      assert [%{artist: "Logistics"}, %{artist: "London Elektricity"}, %{artist: "S.P.Y"}] =
+               Indexed.get_values(index, :albums, :artist, :asc, {:label, "Hospital Records"})
+    end
 
-    # manage_uniques for media was defined on top level (prefilter nil).
-    assert ~w(CD FLAC Vinyl) ==
-             Indexed.get_uniques_list(index, :albums, :media)
+    test "when one is added", %{index: index} do
+      album = %Album{id: 7, label: "Hospital Records", media: "CD", artist: "Danny Byrd"}
+      Indexed.put(index, :albums, album)
 
-    # Get unique media values behind the "label=Hospital Records" prefilter.
-    assert ~w(CD FLAC) ==
-             Indexed.get_uniques_list(index, :albums, :media, {:label, "Hospital Records"})
+      assert [
+               %{artist: "Danny Byrd"},
+               %{artist: "Logistics"},
+               %{artist: "London Elektricity"},
+               %{artist: "S.P.Y"}
+             ] = Indexed.get_values(index, :albums, :artist, :asc, {:label, "Hospital Records"})
+    end
+
+    test "when one is moved to another prefilter", %{index: index} do
+      album = %Album{id: 7, label: "Hospital Records", media: "CD", artist: "Danny Byrd"}
+      Indexed.put(index, :albums, album)
+      album = %Album{id: 7, label: "Liquid V Recordings", media: "CD", artist: "Danny Byrd"}
+      Indexed.put(index, :albums, album)
+
+      assert [
+               %{artist: "Logistics"},
+               %{artist: "London Elektricity"},
+               %{artist: "S.P.Y"}
+             ] = Indexed.get_values(index, :albums, :artist, :asc, {:label, "Hospital Records"})
+    end
+
+    test "when a resort is needed within the same prefilter", %{index: index} do
+      album = %Album{id: 3, label: "Hospital Records", media: "FLAC", artist: "Whiney"}
+      Indexed.put(index, :albums, album)
+
+      assert [
+               %{artist: "Logistics"},
+               %{artist: "S.P.Y"},
+               %{artist: "Whiney"}
+             ] = Indexed.get_values(index, :albums, :artist, :asc, {:label, "Hospital Records"})
+    end
+  end
+
+  describe "get_uniques_list" do
+    test "basic", %{index: index} do
+      # This is available because prefilter field keys imply manage_uniques on
+      # the top level (prefilter nil).
+      assert ["Hospital Records", "Liquid V Recordings"] ==
+               Indexed.get_uniques_list(index, :albums, :label)
+
+      # manage_uniques for media was defined on top level (prefilter nil).
+      assert ~w(CD FLAC Vinyl) ==
+               Indexed.get_uniques_list(index, :albums, :media)
+
+      # Get unique media values behind the "label=Hospital Records" prefilter.
+      assert ~w(CD FLAC) ==
+               Indexed.get_uniques_list(index, :albums, :media, {:label, "Hospital Records"})
+    end
+
+    test "adding a record updates uniques", %{index: index} do
+      list = &Indexed.get_uniques_list(index, :albums, :media, &1)
+      map = &Indexed.get_uniques_map(index, :albums, :media, &1)
+
+      album = %Album{id: 7, label: "RAM Records", media: "Phonograph", artist: "Andy C"}
+      Indexed.put(index, :albums, album)
+
+      assert ["Phonograph"] == list.({:label, "RAM Records"})
+      assert %{"Phonograph" => 1} == map.({:label, "RAM Records"})
+    end
+
+    test "moving a record between prefilters updates uniques", %{index: index} do
+      list = &Indexed.get_uniques_list(index, :albums, :media, &1)
+
+      album = %Album{id: 7, label: "RAM Records", media: "Phonograph", artist: "Andy C"}
+      Indexed.put(index, :albums, album)
+
+      album = %Album{id: 7, label: "A New Label", media: "Phonograph", artist: "Andy C"}
+      Indexed.put(index, :albums, album)
+
+      assert "Phonograph" in list.(nil)
+      assert "Phonograph" in list.({:label, "A New Label"})
+
+      # Make sure the uniques table for RAM Records is deleted.
+      assert is_nil(list.({:label, "RAM Records"}))
+    end
+
+    test "moving a couple ways at once is cool", %{index: index} do
+      list = &Indexed.get_uniques_list(index, :albums, :media, &1)
+      album = %Album{id: 7, label: "RAM Records", media: "Phonograph", artist: "Andy C"}
+      Indexed.put(index, :albums, album)
+
+      album = %Album{id: 7, label: "A New Label", media: "Yak Bak", artist: "Andy C"}
+      Indexed.put(index, :albums, album)
+
+      refute "Phonograph" in list.(nil)
+      assert ["CD", "FLAC", "Vinyl", "Yak Bak"] == list.(nil)
+
+      # Make sure the uniques table for RAM Records is deleted.
+      assert is_nil(list.({:label, "RAM Records"}))
+    end
   end
 
   describe "looks good after adding a record" do
     setup %{index: index} do
       album = %{id: 6, label: "Hospital Records", media: "Minidisc", artist: "Bop"}
-      Indexed.set_record(index, :albums, album)
+      Indexed.put(index, :albums, album)
       [album: album]
     end
 
@@ -123,39 +210,44 @@ defmodule IndexedPrefilterTest do
     end
   end
 
-  describe "looks good after updating a record" do
+  describe "looks good after wholly updating a record" do
     setup %{index: index} do
-      album = %Album{id: 2, label: "Hospital Records", media: "8-track", artist: "Logistics"}
-      Indexed.set_record(index, :albums, album)
+      album = %Album{id: 2, label: "Shogun Audio", media: "8-track", artist: "Fourward"}
+      Indexed.put(index, :albums, album)
       [album: album]
     end
 
-    test "basic prefilter", %{album: album, index: index} do
-      assert %Paginator.Page{
-               entries: [
-                 ^album,
-                 %Album{
-                   id: 3,
-                   label: "Hospital Records",
-                   media: "FLAC",
-                   artist: "London Elektricity"
-                 },
-                 %Album{id: 5, label: "Hospital Records", media: "FLAC", artist: "S.P.Y"}
-               ]
-             } =
-               Indexed.paginate(index, :albums,
-                 order_field: :artist,
-                 order_direction: :asc,
-                 prefilter: {:label, "Hospital Records"}
-               )
-    end
-
     test "get_uniques_list", %{index: index} do
-      assert ["Hospital Records", "Liquid V Recordings"] ==
+      assert ["Hospital Records", "Liquid V Recordings", "Shogun Audio"] ==
                Indexed.get_uniques_list(index, :albums, :label)
 
-      assert ["8-track", "FLAC"] ==
+      assert ["8-track", "CD", "FLAC", "Vinyl"] ==
+               Indexed.get_uniques_list(index, :albums, :media)
+
+      assert ["FLAC"] ==
                Indexed.get_uniques_list(index, :albums, :media, {:label, "Hospital Records"})
+
+      assert ["8-track"] ==
+               Indexed.get_uniques_list(index, :albums, :media, {:label, "Shogun Audio"})
     end
+  end
+
+  test "moving a record between prefilters creates and drops prefilter", %{index: index} do
+    list = &Indexed.get_uniques_list(index, :albums, :media, &1)
+    map = &Indexed.get_uniques_map(index, :albums, :media, &1)
+
+    album = %Album{id: 7, label: "RAM Records", media: "Phonograph", artist: "Andy C"}
+    Indexed.put(index, :albums, album)
+
+    assert ["Phonograph"] == list.({:label, "RAM Records"})
+    assert %{"Phonograph" => 1} == map.({:label, "RAM Records"})
+
+    album = %Album{id: 7, label: "A New Label", media: "Phonograph", artist: "Andy C"}
+    Indexed.put(index, :albums, album)
+
+    assert ["CD", "FLAC", "Phonograph", "Vinyl"] == list.(nil)
+
+    # Make sure the uniques table for RAM Records is deleted.
+    assert is_nil(Indexed.get_uniques_list(index, :albums, :media, {:label, "RAM Records"}))
   end
 end

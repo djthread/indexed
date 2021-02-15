@@ -10,6 +10,25 @@ return. Pass this struct into `Indexed` functions to get, update, and paginate
 records. Remember to do this from the same process which warmed the cache as
 the ETS tables are protected.
 
+## Prefilters and How Data is Indexed
+
+A *prefilter* is applied to a field, and it partitions the data into groups
+where each holds all records where the field has one particular value. For
+each such grouping, indexes for sorting on each configured field under
+`:fields`, ascending and descending are managed. Implicitly, the prefilter
+`nil` is included where all records in the collection are included, so this
+means "no prefilter". (Specify this one only if options are needed.)
+
+Unique values for certain fields under prefilters can be tracked. An
+ascending list of these values or a map where values are occurrence counts
+are available with `Indexed.get_uniques_list/4` and
+`Indexed.get_uniques_map/4`.
+
+* Automatically, every prefiltered field has its unique values tracked under
+  the `nil` prefilter.
+* Any prefilter can list additional fields to track under its
+  `:maintain_unique` option.
+
 ## Pagination
 
 `Indexed.Paginator.paginate/4` imitates the interface of the similarly-named
@@ -45,8 +64,8 @@ cars = [
   %Car{id: 2, make: "Mazda"}
 ]
 
-# Sidenote: for date fields, instead of an atom (`:make`) use a tuple and add
-# `:date` like `{:updated_at, :date}`.
+# Sidenote: for date fields, instead of an atom (`:make`) use a tuple with the
+# sort option like `{:updated_at, sort: :date_time}`.
 index =
   Indexed.warm(
     cars: [fields: [:make], data: {:asc, :make, cars}]
@@ -58,10 +77,12 @@ Indexed.set_record(index, :cars, %{car | make: "Lambo"})
 
 %Car{id: 1, make: "Lambo"} = Indexed.get(index, :cars, 1)
 
-# `new_record?: true` - the record didn't exist before - checking is skipped.
-Indexed.set_record(index, :cars, %Car{id: 3, make: "Tesla"}, new_record?: true)
+Indexed.set_record(index, :cars, %Car{id: 3, make: "Tesla"})
 
 %Car{id: 3, make: "Tesla"} = Indexed.get(index, :cars, 3)
+
+assert [%Car{make: "Lambo"}, %Car{make: "Mazda"}, %Car{make: "Tesla"}] =
+          Indexed.get_values(index, :cars, :make, :asc)
 
 # Next, let's look at the paginator capability...
 
