@@ -6,7 +6,7 @@ defmodule Indexed do
   alias __MODULE__
 
   @typedoc "A record map being cached & indexed. `:id` key is required."
-  @type record :: %{required(:id) => any}
+  @type record :: map
 
   @typedoc "The value of a record's `:id` field - usually a UUID or integer."
   @type id :: any
