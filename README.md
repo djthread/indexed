@@ -82,7 +82,7 @@ Indexed.set_record(index, :cars, %Car{id: 3, make: "Tesla"})
 %Car{id: 3, make: "Tesla"} = Indexed.get(index, :cars, 3)
 
 assert [%Car{make: "Lambo"}, %Car{make: "Mazda"}, %Car{make: "Tesla"}] =
-          Indexed.get_values(index, :cars, :make, :asc)
+          Indexed.get_records(index, :cars, :make, :asc)
 
 # Next, let's look at the paginator capability...
 

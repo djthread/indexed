@@ -22,9 +22,9 @@ defmodule IndexedTest do
     assert is_nil(Indexed.get(index, :cars, 9))
   end
 
-  test "get_values", %{index: index} do
+  test "get_records", %{index: index} do
     assert [%Car{id: 1, make: "Lamborghini"}, %Car{id: 2, make: "Mazda"}] ==
-             Indexed.get_values(index, :cars, :make, :asc)
+             Indexed.get_records(index, :cars, :make, :asc)
   end
 
   describe "put" do
@@ -113,7 +113,7 @@ defmodule IndexedTest do
     assert %Car{id: 3, make: "Tesla"} = Indexed.get(index, :cars, 3)
 
     assert [%Car{make: "Lambo"}, %Car{make: "Mazda"}, %Car{make: "Tesla"}] =
-             Indexed.get_values(index, :cars, :make, :asc)
+             Indexed.get_records(index, :cars, :make, :asc)
 
     after_cursor = "g3QAAAACZAACaWRhAmQABG1ha2VtAAAABU1hemRh"
 
@@ -185,6 +185,6 @@ defmodule IndexedTest do
       inserted_at: ~U[2021-02-14 08:14:12.004640Z]
     })
 
-    assert [%{id: 2}, %{id: 3}, %{id: 1}] = Indexed.get_values(index, :cars, :inserted_at, :desc)
+    assert [%{id: 2}, %{id: 3}, %{id: 1}] = Indexed.get_records(index, :cars, :inserted_at, :desc)
   end
 end

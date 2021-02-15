@@ -77,7 +77,7 @@ defmodule IndexedPrefilterTest do
   describe "sorted indexes by field are maintained" do
     test "basic list with prefilter", %{index: index} do
       assert [%{artist: "Logistics"}, %{artist: "London Elektricity"}, %{artist: "S.P.Y"}] =
-               Indexed.get_values(index, :albums, :artist, :asc, {:label, "Hospital Records"})
+               Indexed.get_records(index, :albums, :artist, :asc, {:label, "Hospital Records"})
     end
 
     test "when one is added", %{index: index} do
@@ -89,7 +89,7 @@ defmodule IndexedPrefilterTest do
                %{artist: "Logistics"},
                %{artist: "London Elektricity"},
                %{artist: "S.P.Y"}
-             ] = Indexed.get_values(index, :albums, :artist, :asc, {:label, "Hospital Records"})
+             ] = Indexed.get_records(index, :albums, :artist, :asc, {:label, "Hospital Records"})
     end
 
     test "when one is moved to another prefilter", %{index: index} do
@@ -102,7 +102,7 @@ defmodule IndexedPrefilterTest do
                %{artist: "Logistics"},
                %{artist: "London Elektricity"},
                %{artist: "S.P.Y"}
-             ] = Indexed.get_values(index, :albums, :artist, :asc, {:label, "Hospital Records"})
+             ] = Indexed.get_records(index, :albums, :artist, :asc, {:label, "Hospital Records"})
     end
 
     test "when a resort is needed within the same prefilter", %{index: index} do
@@ -113,7 +113,7 @@ defmodule IndexedPrefilterTest do
                %{artist: "Logistics"},
                %{artist: "S.P.Y"},
                %{artist: "Whiney"}
-             ] = Indexed.get_values(index, :albums, :artist, :asc, {:label, "Hospital Records"})
+             ] = Indexed.get_records(index, :albums, :artist, :asc, {:label, "Hospital Records"})
     end
   end
 

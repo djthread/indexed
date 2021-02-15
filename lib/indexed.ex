@@ -69,14 +69,14 @@ defmodule Indexed do
   end
 
   @doc """
-  Get a list of all cached entities of a certain type.
+  Get a list of all cached records of a certain type.
 
   `prefilter` - 2-element tuple (`t:prefilter/0`) indicating which
   sub-section of the data should be queried. Default is `nil` - no prefilter.
   Returns `nil` if prefilter is non-existent.
   """
-  @spec get_values(t, atom, atom, :asc | :desc, prefilter) :: [record] | nil
-  def get_values(index, entity_name, order_field, order_direction, prefilter \\ nil) do
+  @spec get_records(t, atom, atom, :asc | :desc, prefilter) :: [record] | nil
+  def get_records(index, entity_name, order_field, order_direction, prefilter \\ nil) do
     index
     |> get_index(entity_name, order_field, order_direction, prefilter)
     |> Enum.map(&get(index, entity_name, &1))
