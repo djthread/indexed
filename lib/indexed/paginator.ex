@@ -33,6 +33,9 @@ defmodule Indexed.Paginator do
     * `:order_field` - field atom (eg. `:updated_by`)
     * `:filter` - An optional function which takes a record and returns a
       boolean -- true if the record is desired in pagination.
+    * `:prefilter` - Two-element tuple, indicating the field name and value for
+      the prefiltered index to be used. Default is `nil`, indicating that the
+      index with the non-prefiltered, full list of records should be used.
 
     # * `:fetch_cursor_value_fun` function of arity 2 to lookup cursor values on returned records.
     # Defaults to `Paginator.default_fetch_cursor_value/2`
@@ -51,17 +54,17 @@ defmodule Indexed.Paginator do
     # of records is expensive so it is capped by default. Can be set to `:infinity`
     # in order to count all the records. Defaults to `10,000`.
   """
-  @spec paginate(Indexed.Index.t(), atom, keyword) :: Paginator.Page.t()
-  def paginate(index, entity, params) do
+  @spec paginate(Indexed.t(), atom, keyword) :: Paginator.Page.t()
+  def paginate(index, entity_name, params) do
     import Indexed
 
     order_direction = params[:order_direction]
     order_field = params[:order_field]
     cursor_fields = [{order_field, order_direction}, {:id, :asc}]
-    ordered_ids = get_index(index, index_key(entity, order_field, order_direction))
+    ordered_ids = get_index(index, entity_name, order_field, order_direction, params[:prefilter])
 
-    filter = fn _record -> true end
-    getter = fn id -> get(index, entity, id) end
+    filter = params[:filter] || fn _record -> true end
+    getter = fn id -> get(index, entity_name, id) end
 
     paginator_opts = Keyword.merge(params, cursor_fields: cursor_fields, filter: filter)
 
@@ -145,17 +148,15 @@ defmodule Indexed.Paginator do
 
   # Scan ids until cursor, then collect items where `filter/1` returns true,
   # until limit. If `cursor_id` is nil, then we are on the first page.
-  @spec collect_after(fun, [id], Config.t(), fun, id | nil) ::
+  @spec collect_after(fun, [id], Config.t(), fun | nil, id | nil) ::
           {records :: [record], count :: integer, cursor_before :: String.t() | nil,
            cursor_after :: String.t() | nil}
   defp collect_after(record_getter, ordered_ids, config, filter, cursor_id) do
-    filter = filter || fn _ -> true end
-
     eat = fn id, acc, read_ids, count, cursor_before ->
       record = record_getter.(id)
 
       {acc, count} =
-        if filter.(record),
+        if is_nil(filter) || filter.(record),
           do: {[record | acc], count + 1},
           else: {acc, count}
 
@@ -165,7 +166,7 @@ defmodule Indexed.Paginator do
       cursor_before =
         if false == cursor_before and match?([_], acc),
           do:
-            Enum.any?(read_ids, &filter.(record_getter.(&1))) &&
+            (is_nil(filter) or Enum.any?(read_ids, &filter.(record_getter.(&1)))) &&
               cursor_for_record(hd(acc), config.cursor_fields),
           else: cursor_before
 
