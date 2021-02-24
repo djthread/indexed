@@ -31,14 +31,14 @@ are available with `Indexed.get_uniques_list/4` and
 
 ## Pagination
 
-`Indexed.Paginator.paginate/4` imitates the interface of the similarly-named
-function in the cursor-based pagination library,
+Calling Indexed.paginate/3` returns a `%Paginator.Page{}` as defined in the
+cursor-based pagination library,
 [`paginator`](https://github.com/duffelhq/paginator/). The idea is that
 server-side solutions are able to switch between using `paginator` to access
 the database and `indexed` for fast, in-memory data, without any changes
 being required on the client.
 
-See `Indexed.Paginator` for more details.
+See `Indexed.Actions.Paginate` for more details.
 
 ## Installation
 

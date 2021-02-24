@@ -1,6 +1,6 @@
-defmodule Indexed.PaginatorTest do
+defmodule Indexed.Actions.PaginateTest do
   use ExUnit.Case
-  import Indexed.Paginator, only: [do_paginate: 3]
+  import Indexed.Actions.Paginate, only: [paginate: 3]
 
   @ids_x_asc [
     "aaaa2a06-0dcf-4d9b-b2fc-31bfda45527b",
@@ -54,7 +54,7 @@ defmodule Indexed.PaginatorTest do
                total_count: nil,
                total_count_cap_exceeded: false
              }
-           } = do_paginate(@ids_x_asc, &getter/1, opts())
+           } = paginate(@ids_x_asc, &getter/1, opts())
 
     cursor_after_2 =
       "g3QAAAACZAACaWRtAAAAJGRkZGQ0M2JmLTA1ZjAtNDAzYi1hZDliLTBkYmZhNWJhZDYzNmQAAXhtAAAAAm94"
@@ -69,7 +69,7 @@ defmodule Indexed.PaginatorTest do
                total_count: nil,
                total_count_cap_exceeded: false
              }
-           } = do_paginate(@ids_x_asc, &getter/1, opts(after: cursor_after_1))
+           } = paginate(@ids_x_asc, &getter/1, opts(after: cursor_after_1))
 
     last_page_before = last_page_before()
 
@@ -82,7 +82,7 @@ defmodule Indexed.PaginatorTest do
                total_count: nil,
                total_count_cap_exceeded: false
              }
-           } = do_paginate(@ids_x_asc, &getter/1, opts(after: cursor_after_2))
+           } = paginate(@ids_x_asc, &getter/1, opts(after: cursor_after_2))
   end
 
   test "can page backward" do
@@ -97,7 +97,7 @@ defmodule Indexed.PaginatorTest do
                total_count: nil,
                total_count_cap_exceeded: false
              }
-           } = do_paginate(@ids_x_asc, &getter/1, opts(before: last_page_before()))
+           } = paginate(@ids_x_asc, &getter/1, opts(before: last_page_before()))
   end
 
   test "can filter" do
@@ -107,7 +107,7 @@ defmodule Indexed.PaginatorTest do
     end
 
     assert %Paginator.Page{entries: [%{x: "ox"}, %{x: "za"}]} =
-             do_paginate(@ids_x_asc, &getter/1, opts(filter: filter))
+             paginate(@ids_x_asc, &getter/1, opts(filter: filter))
   end
 
   # The before-cursor on the very last page.

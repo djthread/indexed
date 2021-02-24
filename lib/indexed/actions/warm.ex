@@ -3,12 +3,12 @@ defmodule Indexed.Actions.Warm do
   alias Indexed.{Entity, UniquesBundle}
   alias __MODULE__
 
-  @ets_opts [read_concurrency: true]
-
   defstruct [:data_tuple, :entity_name, :index_ref]
 
   @typedoc """
-  * `:data` -
+  * `:data_tuple` - full input data set with order/direction hint
+  * `:entity_name` - entity name atom (eg. `:cars`)
+  * `:index_ref` - ETS table reference for storing index data
   """
   @type t :: %__MODULE__{
           data_tuple: data_tuple,
@@ -53,11 +53,11 @@ defmodule Indexed.Actions.Warm do
   """
   @spec run(keyword) :: Indexed.t()
   def run(args) do
-    index_ref = :ets.new(:indexes, @ets_opts)
+    index_ref = :ets.new(:indexes, Indexed.ets_opts())
 
     entities =
       Map.new(args, fn {entity_name, opts} ->
-        ref = :ets.new(entity_name, @ets_opts)
+        ref = :ets.new(entity_name, Indexed.ets_opts())
         fields = resolve_fields_opt(opts[:fields], entity_name)
         prefilter_configs = resolve_prefilters_opt(opts[:prefilters])
 
@@ -135,9 +135,9 @@ defmodule Indexed.Actions.Warm do
   def warm_index(ref, entity_name, prefilter, {name, _sort_hint}, {data_dir, name, data}) do
     data_ids = id_list(data)
 
-    asc_key = Indexed.index_key(entity_name, name, :asc, prefilter)
+    asc_key = Indexed.index_key(entity_name, prefilter, name, :asc)
     asc_ids = if data_dir == :asc, do: data_ids, else: Enum.reverse(data_ids)
-    desc_key = Indexed.index_key(entity_name, name, :desc, prefilter)
+    desc_key = Indexed.index_key(entity_name, prefilter, name, :desc)
     desc_ids = if data_dir == :desc, do: data_ids, else: Enum.reverse(data_ids)
 
     :ets.insert(ref, {asc_key, asc_ids})
@@ -145,19 +145,22 @@ defmodule Indexed.Actions.Warm do
   end
 
   # Data direction hint does NOT match this field -- sorting needed.
-  def warm_index(ref, entity_name, prefilter, {name, opts}, {_, _, data}) do
-    sort_fn =
-      case opts[:sort] do
-        :date_time -> &(:lt == DateTime.compare(Map.get(&1, name), Map.get(&2, name)))
-        nil -> &(Map.get(&1, name) < Map.get(&2, name))
-      end
-
-    asc_key = Indexed.index_key(entity_name, name, :asc, prefilter)
-    desc_key = Indexed.index_key(entity_name, name, :desc, prefilter)
-    asc_ids = data |> Enum.sort(sort_fn) |> id_list()
+  def warm_index(ref, entity_name, prefilter, {name, _} = field, {_, _, data}) do
+    asc_key = Indexed.index_key(entity_name, prefilter, name, :asc)
+    desc_key = Indexed.index_key(entity_name, prefilter, name, :desc)
+    asc_ids = data |> Enum.sort(Warm.record_sort_fn(field)) |> id_list()
 
     :ets.insert(ref, {asc_key, asc_ids})
     :ets.insert(ref, {desc_key, Enum.reverse(asc_ids)})
+  end
+
+  @doc "From a field, make a compare function, suitable for `Enum.sort/2`."
+  @spec record_sort_fn(Entity.field()) :: (any, any -> boolean)
+  def record_sort_fn({name, opts}) do
+    case opts[:sort] do
+      :date_time -> &(:lt == DateTime.compare(Map.get(&1, name), Map.get(&2, name)))
+      nil -> &(Map.get(&1, name) < Map.get(&2, name))
+    end
   end
 
   # Save list of unique values for each field configured by :maintain_unique.

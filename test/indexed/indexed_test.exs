@@ -24,7 +24,7 @@ defmodule IndexedTest do
 
   test "get_records", %{index: index} do
     assert [%Car{id: 1, make: "Lamborghini"}, %Car{id: 2, make: "Mazda"}] ==
-             Indexed.get_records(index, :cars, :make, :asc)
+             Indexed.get_records(index, :cars, nil, :make, :asc)
   end
 
   describe "put" do
@@ -41,38 +41,49 @@ defmodule IndexedTest do
   end
 
   test "index_key" do
-    asc_key = "cars[]color_asc"
-    ^asc_key = Indexed.index_key("cars", "color", :asc, nil)
-    ^asc_key = Indexed.index_key("cars", "color", :asc)
+    assert "idx_cars[]color_asc" == Indexed.index_key("cars", nil, "color", :asc)
   end
 
   describe "get_index" do
     test "happy", %{index: index} do
-      assert [2, 1] == Indexed.get_index(index, :cars, :make, :desc)
+      assert [2, 1] == Indexed.get_index(index, :cars, nil, :make, :desc)
     end
 
     test "raise on no such index", %{index: index} do
-      assert is_nil(Indexed.get_index(index, :cars, :whoops, :desc))
+      assert is_nil(Indexed.get_index(index, :cars, nil, :whoops, :desc))
     end
   end
 
-  test "paginate", %{index: index} do
-    add_tesla(index)
+  describe "paginate" do
+    test "typical", %{index: index} do
+      add_tesla(index)
 
-    assert %Paginator.Page{
-             entries: [
-               %Car{id: 3, make: "Tesla"},
-               %Car{id: 2, make: "Mazda"}
-             ],
-             metadata: %Paginator.Page.Metadata{
-               after: "g3QAAAACZAACaWRhAmQABG1ha2VtAAAABU1hemRh",
-               before: nil,
-               limit: 2,
-               total_count: nil,
-               total_count_cap_exceeded: false
-             }
-           } =
-             Indexed.paginate(index, :cars, limit: 2, order_field: :make, order_direction: :desc)
+      assert {:ok,
+              %Paginator.Page{
+                entries: [
+                  %Car{id: 3, make: "Tesla"},
+                  %Car{id: 2, make: "Mazda"}
+                ],
+                metadata: %Paginator.Page.Metadata{
+                  after: "g3QAAAACZAACaWRhAmQABG1ha2VtAAAABU1hemRh",
+                  before: nil,
+                  limit: 2,
+                  total_count: nil,
+                  total_count_cap_exceeded: false
+                }
+              }} =
+               Indexed.paginate(index, :cars, limit: 2, order_field: :make, order_direction: :desc)
+    end
+
+    test "no ref" do
+      assert_raise ArgumentError, fn ->
+        Indexed.paginate(%Indexed{}, :cars, limit: 2)
+      end
+    end
+
+    test "no such index", %{index: index} do
+      assert :error == Indexed.paginate(index, "what", limit: 2)
+    end
   end
 
   describe "warm" do
@@ -113,37 +124,39 @@ defmodule IndexedTest do
     assert %Car{id: 3, make: "Tesla"} = Indexed.get(index, :cars, 3)
 
     assert [%Car{make: "Lambo"}, %Car{make: "Mazda"}, %Car{make: "Tesla"}] =
-             Indexed.get_records(index, :cars, :make, :asc)
+             Indexed.get_records(index, :cars, nil, :make, :asc)
 
     after_cursor = "g3QAAAACZAACaWRhAmQABG1ha2VtAAAABU1hemRh"
 
-    assert %Paginator.Page{
-             entries: [
-               %Car{id: 3, make: "Tesla"},
-               %Car{id: 2, make: "Mazda"}
-             ],
-             metadata: %Paginator.Page.Metadata{
-               after: ^after_cursor,
-               before: nil,
-               limit: 2,
-               total_count: nil,
-               total_count_cap_exceeded: false
-             }
-           } =
+    assert {:ok,
+            %Paginator.Page{
+              entries: [
+                %Car{id: 3, make: "Tesla"},
+                %Car{id: 2, make: "Mazda"}
+              ],
+              metadata: %Paginator.Page.Metadata{
+                after: ^after_cursor,
+                before: nil,
+                limit: 2,
+                total_count: nil,
+                total_count_cap_exceeded: false
+              }
+            }} =
              Indexed.paginate(index, :cars, limit: 2, order_field: :make, order_direction: :desc)
 
-    assert %Paginator.Page{
-             entries: [
-               %Car{id: 1, make: "Lambo"}
-             ],
-             metadata: %Paginator.Page.Metadata{
-               after: nil,
-               before: "g3QAAAACZAACaWRhAWQABG1ha2VtAAAABUxhbWJv",
-               limit: 2,
-               total_count: nil,
-               total_count_cap_exceeded: false
-             }
-           } =
+    assert {:ok,
+            %Paginator.Page{
+              entries: [
+                %Car{id: 1, make: "Lambo"}
+              ],
+              metadata: %Paginator.Page.Metadata{
+                after: nil,
+                before: "g3QAAAACZAACaWRhAWQABG1ha2VtAAAABUxhbWJv",
+                limit: 2,
+                total_count: nil,
+                total_count_cap_exceeded: false
+              }
+            }} =
              Indexed.paginate(index, :cars,
                after: after_cursor,
                limit: 2,
@@ -185,6 +198,7 @@ defmodule IndexedTest do
       inserted_at: ~U[2021-02-14 08:14:12.004640Z]
     })
 
-    assert [%{id: 2}, %{id: 3}, %{id: 1}] = Indexed.get_records(index, :cars, :inserted_at, :desc)
+    assert [%{id: 2}, %{id: 3}, %{id: 1}] =
+             Indexed.get_records(index, :cars, nil, :inserted_at, :desc)
   end
 end

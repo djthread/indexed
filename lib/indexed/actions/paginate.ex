@@ -1,4 +1,4 @@
-defmodule Indexed.Paginator do
+defmodule Indexed.Actions.Paginate do
   @moduledoc """
   Tools for paginating in-memory data structures.
 
@@ -32,7 +32,8 @@ defmodule Indexed.Paginator do
     * `:order_direction` - either `:asc` or `:desc`
     * `:order_field` - field atom (eg. `:updated_by`)
     * `:filter` - An optional function which takes a record and returns a
-      boolean -- true if the record is desired in pagination.
+      boolean, true if the record is desired in pagination. Default is `nil`
+      where all records (in the selected prefilter) will be included.
     * `:prefilter` - Two-element tuple, indicating the field name and value for
       the prefiltered index to be used. Default is `nil`, indicating that the
       index with the non-prefiltered, full list of records should be used.
@@ -54,26 +55,33 @@ defmodule Indexed.Paginator do
     # of records is expensive so it is capped by default. Can be set to `:infinity`
     # in order to count all the records. Defaults to `10,000`.
   """
-  @spec paginate(Indexed.t(), atom, keyword) :: Paginator.Page.t()
-  def paginate(index, entity_name, params) do
-    import Indexed
-
-    order_direction = params[:order_direction]
+  @spec run(Indexed.t(), atom, keyword) :: {:ok, Paginator.Page.t()} | :error
+  def run(index, entity_name, params) do
+    order_dir = params[:order_direction]
     order_field = params[:order_field]
-    cursor_fields = [{order_field, order_direction}, {:id, :asc}]
-    ordered_ids = get_index(index, entity_name, order_field, order_direction, params[:prefilter])
+    pf = params[:prefilter]
+    cursor_fields = [{order_field, order_dir}, {:id, :asc}]
 
-    filter = params[:filter] || fn _record -> true end
-    getter = fn id -> get(index, entity_name, id) end
+    case Indexed.get_index(index, entity_name, pf, order_field, order_dir) do
+      ordered_ids when is_list(ordered_ids) ->
+        filter = params[:filter]
+        getter = fn id -> Indexed.get(index, entity_name, id) end
 
-    paginator_opts = Keyword.merge(params, cursor_fields: cursor_fields, filter: filter)
+        paginator_opts = Keyword.merge(params, cursor_fields: cursor_fields, filter: filter)
 
-    do_paginate(ordered_ids, getter, paginator_opts)
+        {:ok, paginate(ordered_ids, getter, paginator_opts)}
+
+      nil ->
+        :error
+    end
   end
 
-  @doc ""
-  @spec do_paginate([id], fun, keyword) :: Page.t()
-  def do_paginate(ordered_ids, record_getter, opts \\ []) do
+  @doc """
+  Given the relevant, presorted list of ids and a function to fetch a record
+  by its id, build the `t:Paginator.Page.t/0` result.
+  """
+  @spec paginate([id], fun, keyword) :: Page.t()
+  def paginate(ordered_ids, record_getter, opts \\ []) when is_list(ordered_ids) do
     filter = opts[:filter]
     config = Config.new(Keyword.merge(@config, opts))
 
@@ -115,8 +123,6 @@ defmodule Indexed.Paginator do
           {records :: [record], count :: integer, cursor_before :: String.t(),
            cursor_after :: String.t()}
   defp collect_before(record_getter, ordered_ids, config, filter, cursor_id) do
-    filter = filter || fn _ -> true end
-
     prev_ids_revd =
       Enum.reduce_while(ordered_ids, [], fn
         ^cursor_id, acc -> {:halt, acc}
@@ -127,7 +133,11 @@ defmodule Indexed.Paginator do
       Enum.reduce_while(prev_ids_revd, {[], 0, false, nil}, fn id,
                                                                {acc, count, false, cursor_after} ->
         record = record_getter.(id)
-        {acc, count} = if filter.(record), do: {[record | acc], count + 1}, else: {acc, count}
+
+        {acc, count} =
+          if is_nil(filter) || filter.(record),
+            do: {[record | acc], count + 1},
+            else: {acc, count}
 
         cursor_after =
           case acc do
