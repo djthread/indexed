@@ -1,5 +1,5 @@
 defmodule Indexed.Actions.Put do
-  @moduledoc "Holds internal state info during operations."
+  @moduledoc "An index action where a record is being added or updated."
   alias Indexed.{Entity, UniquesBundle, View}
   alias __MODULE__
 
@@ -48,7 +48,7 @@ defmodule Indexed.Actions.Put do
 
       {pf_key, pf_opts} ->
         # Get global (prefilter nil) uniques bundle.
-        {map, list, _} = bundle = UniquesBundle.get(index, entity_name, nil, pf_key)
+        {map, list, _, _} = bundle = UniquesBundle.get(index, entity_name, nil, pf_key)
         record_value = Map.get(record, pf_key)
 
         handle_prefilter_value = fn value, new_value? ->
@@ -83,26 +83,28 @@ defmodule Indexed.Actions.Put do
     :ok
   end
 
-  # Loop the fields of a a `maintain_unique` option, updating uniques indexes.
+  # Loop the fields of a `:maintain_unique` option, updating uniques indexes.
   # `new_value?` of true indicates the prefilter value is new and not indexed.
+  @spec update_all_uniques(t, [atom], Indexed.prefilter(), boolean) :: :ok
   defp update_all_uniques(put, maintain_unique, prefilter, new_value?) do
-    for field_name <- maintain_unique do
+    Enum.each(maintain_unique, fn field_name ->
       prev_in_pf? = put.previous && under_prefilter?(put, put.previous, prefilter)
       this_in_pf? = under_prefilter?(put, put.record, prefilter)
 
       bundle =
         if new_value?,
-          do: {%{}, [], false},
+          do: {%{}, [], false, false},
           else: UniquesBundle.get(put.index, put.entity_name, prefilter, field_name)
 
       update_uniques(put, prefilter, field_name, bundle, prev_in_pf?, this_in_pf?)
-    end
+    end)
   end
 
   # Update any configured :maintain_unique fields for this prefilter.
   # `prev_in_pf?` and `this_in_pf?` tell the logic whether the previous and new
   # records are in the prefilter.
-  @spec update_uniques(t, Indexed.prefilter(), atom, UniquesBundle.t(), boolean, boolean) :: :ok
+  @spec update_uniques(t, Indexed.prefilter(), atom, UniquesBundle.t(), boolean, boolean) ::
+          UniquesBundle.t()
   defp update_uniques(put, prefilter, field_name, bundle, prev_in_pf?, this_in_pf?) do
     new_value = Map.get(put.record, field_name)
     previous_value = put.previous && Map.get(put.previous, field_name)
@@ -187,9 +189,9 @@ defmodule Indexed.Actions.Put do
     end)
   end
 
-  # Update a pair of indexes by understanding if the record's id must be
-  # resorted by removing and adding it or simply one of the two if it is
-  # entering or leaving the prefilter.
+  # Update a pair of indexes (asc/desc) by understanding if the record's id
+  # must be resorted by removing and adding it or simply one of the two if it
+  # is entering or leaving the prefilter.
   @spec put_index(t, Entity.field(), Indexed.prefilter(), [:remove | :add], boolean) :: :ok
   defp put_index(put, {field_name, _} = field, prefilter, actions, newly_seen_value?) do
     asc_key = Indexed.index_key(put.entity_name, prefilter, field_name, :asc)

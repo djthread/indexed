@@ -248,4 +248,25 @@ defmodule IndexedPrefilterTest do
     # Make sure the uniques table for RAM Records is deleted.
     assert is_nil(list.({:label, "RAM Records"}))
   end
+
+  describe "drop" do
+    defp records(i, pf), do: Indexed.get_records(i, :albums, pf, :artist, :asc)
+    defp list(i, pf), do: Indexed.get_uniques_list(i, :albums, pf, :media)
+    defp map(i, pf), do: Indexed.get_uniques_map(i, :albums, pf, :media)
+
+    test "losing last unique value occurrence for pf cleans up index entries", %{index: i} do
+      prefilter = {:label, "Liquid V Recordings"}
+
+      assert [%{id: id1}, %{id: id2}] = records(i, prefilter)
+      assert %{"CD" => 1, "Vinyl" => 1} == map(i, prefilter)
+      assert ["CD", "Vinyl"] == list(i, prefilter)
+
+      Indexed.drop(i, :albums, id1)
+      Indexed.drop(i, :albums, id2)
+
+      assert nil == records(i, prefilter)
+      assert nil == map(i, prefilter)
+      assert nil == list(i, prefilter)
+    end
+  end
 end

@@ -188,4 +188,23 @@ defmodule IndexedViewsTest do
     start_supervised!({Phoenix.PubSub, name: @pubsub})
     Application.put_env(:indexed, :pubsub, @pubsub)
   end
+
+  describe "drop" do
+    defp records(i, fp), do: Indexed.get_records(i, :albums, fp, :artist, :asc)
+    defp list(i, fp), do: Indexed.get_uniques_list(i, :albums, fp, :id)
+    defp map(i, fp), do: Indexed.get_uniques_map(i, :albums, fp, :id)
+
+    test "basic", %{fingerprint: fp, index: i} do
+      assert [%{id: id1}, %{id: id2}] = records(i, fp)
+      assert %{2 => 1, 3 => 1} == map(i, fp)
+      assert [2, 3] == list(i, fp)
+
+      Indexed.drop(i, :albums, id1)
+      Indexed.drop(i, :albums, id2)
+
+      assert [] == records(i, fp)
+      assert %{} == map(i, fp)
+      assert [] == list(i, fp)
+    end
+  end
 end

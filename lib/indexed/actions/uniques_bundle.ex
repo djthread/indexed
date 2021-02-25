@@ -8,6 +8,7 @@ defmodule Indexed.UniquesBundle do
   data mainained, a list of the map's keys, is a handy, ascending-sorted list
   of these values.
   """
+  alias __MODULE__
 
   @typedoc """
   A 3-element tuple defines unique values under a prefilter:
@@ -16,8 +17,12 @@ defmodule Indexed.UniquesBundle do
   2. List of discrete values. (Keys of #1's map.)
   3. A boolean which is true when the list of keys has been updated and
      should be saved.
+  4. A boolean which is true when `remove/2` is used and it has taken the
+     last remaining instance of the given value.
   """
-  @type t :: {counts_map, list :: [any] | nil, list_updated? :: boolean}
+  @type t ::
+          {counts_map, list :: [any] | nil, list_updated? :: boolean,
+           last_instance_removed? :: boolean}
 
   @typedoc "Occurrences of each value (map key) under a prefilter."
   @type counts_map :: %{any => non_neg_integer}
@@ -27,54 +32,56 @@ defmodule Indexed.UniquesBundle do
   def get(index, entity_name, prefilter, field_name) do
     map = Indexed.get_uniques_map(index, entity_name, prefilter, field_name)
     list = Indexed.get_uniques_list(index, entity_name, prefilter, field_name)
-    {map, list, false}
+    {map, list, false, false}
   end
 
   @doc "Remove value from the uniques bundle."
   @spec remove(t, any) :: t
-  def remove({counts_map, list, list_updated?}, value) do
+  def remove({counts_map, list, list_updated?, last_instance_removed?}, value) do
     case Map.fetch!(counts_map, value) do
-      1 -> {Map.delete(counts_map, value), list -- [value], true}
-      n -> {Map.put(counts_map, value, n - 1), list, list_updated?}
+      1 -> {Map.delete(counts_map, value), list -- [value], true, true}
+      n -> {Map.put(counts_map, value, n - 1), list, list_updated?, last_instance_removed?}
     end
   end
 
   @doc "Add a value to the uniques bundle."
   @spec add(t, any) :: t
-  def add({counts_map, list, list_updated?}, value) do
+  def add({counts_map, list, list_updated?, last_instance_removed?}, value) do
     case counts_map[value] do
       nil ->
         first_bigger_idx = Enum.find_index(list, &(&1 > value))
         new_list = List.insert_at(list, first_bigger_idx || -1, value)
         new_counts_map = Map.put(counts_map, value, 1)
-        {new_counts_map, new_list, true}
+        {new_counts_map, new_list, true, last_instance_removed?}
 
       orig_count ->
-        {Map.put(counts_map, value, orig_count + 1), list, list_updated?}
+        {Map.put(counts_map, value, orig_count + 1), list, list_updated?, last_instance_removed?}
     end
   end
 
-  @doc "Store two indexes for unique value tracking."
-  @spec put(t, :ets.tid(), atom, Indexed.prefilter(), atom) :: :ok
+  @doc "Store unique values for a field in a prefilter (as a list and mop)."
+  @spec put(t, :ets.tid(), atom, Indexed.prefilter(), atom) :: UniquesBundle.t()
   def put(
-        {counts_map, list, list_updated?},
+        {counts_map, list, list_updated?, _} = bundle,
         index_ref,
         entity_name,
         prefilter,
         field_name
       ) do
-    list_key = fn -> Indexed.uniques_list_key(entity_name, prefilter, field_name) end
-    counts_key = fn -> Indexed.uniques_map_key(entity_name, prefilter, field_name) end
+    list_key = Indexed.uniques_list_key(entity_name, prefilter, field_name)
+    counts_key = Indexed.uniques_map_key(entity_name, prefilter, field_name)
 
-    if list_updated? and Enum.empty?(list) do
+    if list_updated? and Enum.empty?(list) and not is_binary(prefilter) do
       # This prefilter has ran out of records -- delete the ETS table.
-      :ets.delete(index_ref, list_key.())
-      :ets.delete(index_ref, counts_key.())
+      # Note that for views (binary prefilter) we allow the uniques to remain
+      # in the empty state. They go when the view is destroyed.
+      :ets.delete(index_ref, list_key)
+      :ets.delete(index_ref, counts_key)
     else
-      if list_updated?, do: :ets.insert(index_ref, {list_key.(), list})
-      :ets.insert(index_ref, {counts_key.(), counts_map})
+      if list_updated?, do: :ets.insert(index_ref, {list_key, list})
+      :ets.insert(index_ref, {counts_key, counts_map})
     end
 
-    :ok
+    bundle
   end
 end

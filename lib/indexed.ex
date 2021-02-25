@@ -42,6 +42,7 @@ defmodule Indexed do
 
   defdelegate warm(args), to: Indexed.Actions.Warm, as: :run
   defdelegate put(index, entity_name, record), to: Indexed.Actions.Put, as: :run
+  defdelegate drop(index, entity_name, id), to: Indexed.Actions.Drop, as: :run
   defdelegate create_view(index, entity_name, fp, opts), to: Indexed.Actions.CreateView, as: :run
   defdelegate destroy_view(index, entity_name, fp), to: Indexed.Actions.DestroyView, as: :run
   defdelegate paginate(index, entity_name, params), to: Indexed.Actions.Paginate, as: :run
@@ -99,11 +100,12 @@ defmodule Indexed do
   `prefilter` - 2-element tuple (`t:prefilter/0`) indicating which
   sub-section of the data should be queried. Default is `nil` - no prefilter.
   """
-  @spec get_records(t, atom, prefilter, atom, :asc | :desc) :: [record]
+  @spec get_records(t, atom, prefilter, atom, :asc | :desc) :: [record] | nil
   def get_records(index, entity_name, prefilter, order_field, order_direction) do
-    index
-    |> get_index(entity_name, prefilter, order_field, order_direction)
-    |> Enum.map(&get(index, entity_name, &1))
+    with records when is_list(records) <-
+           get_index(index, entity_name, prefilter, order_field, order_direction) do
+      Enum.map(records, &get(index, entity_name, &1))
+    end
   end
 
   @doc "Cache key for a given entity, field and direction."

@@ -117,7 +117,7 @@ defmodule Indexed.Actions.Warm do
           {Map.put(counts_map, pf_val, length(records)), [pf_val | list]}
         end)
 
-      bundle = {counts_map, Enum.sort(Enum.uniq(list)), true}
+      bundle = {counts_map, Enum.sort(Enum.uniq(list)), true, false}
       UniquesBundle.put(bundle, index_ref, entity_name, nil, pf_key)
 
       # For each value found for the prefilter, create a set of indexes.
@@ -175,7 +175,7 @@ defmodule Indexed.Actions.Warm do
           {Map.put(counts_map, val, num), [val | list]}
         end)
 
-      bundle = {counts_map, Enum.sort(Enum.uniq(list)), true}
+      bundle = {counts_map, Enum.sort(Enum.uniq(list)), true, false}
       UniquesBundle.put(bundle, index_ref, entity_name, prefilter, field_name)
     end)
   end

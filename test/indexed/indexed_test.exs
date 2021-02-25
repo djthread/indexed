@@ -40,6 +40,21 @@ defmodule IndexedTest do
     end
   end
 
+  describe "drop" do
+    test "basic", %{index: index} do
+      get = fn -> Indexed.get(index, :cars, 1) end
+      assert %{id: 1, make: "Lamborghini"} = get.()
+      :ok = Indexed.drop(index, :cars, 1)
+      assert nil == get.()
+    end
+
+    test "non-existent", %{index: index} do
+      get = fn -> Indexed.get(index, :cars, 99) end
+      assert nil == get.()
+      :error = Indexed.drop(index, :cars, 99)
+    end
+  end
+
   test "index_key" do
     assert "idx_cars[]color_asc" == Indexed.index_key("cars", nil, "color", :asc)
   end
@@ -82,7 +97,7 @@ defmodule IndexedTest do
     end
 
     test "no such index", %{index: index} do
-      assert :error == Indexed.paginate(index, "what", limit: 2)
+      assert is_nil(Indexed.paginate(index, "what", limit: 2))
     end
   end
 
