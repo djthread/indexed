@@ -125,7 +125,7 @@ defmodule Indexed.Actions.Warm do
         end)
 
       bundle = {counts_map, Enum.sort(Enum.uniq(list)), true, false}
-      UniquesBundle.put(bundle, index_ref, entity_name, nil, pf_key)
+      UniquesBundle.put(bundle, index_ref, entity_name, nil, pf_key, new?: true)
 
       Logger.debug(fn ->
         "--> Putting UB (for #{pf_key}) with #{map_size(counts_map)} elements."

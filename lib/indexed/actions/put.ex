@@ -118,7 +118,8 @@ defmodule Indexed.Actions.Put do
     new_value = Map.get(put.record, field_name)
     previous_value = put.previous && Map.get(put.previous, field_name)
 
-    bundle =
+    {_, _, events, _} =
+      bundle =
       if put.previous do
         bundle = if prev_in_pf?, do: UniquesBundle.remove(bundle, previous_value), else: bundle
         if this_in_pf?, do: UniquesBundle.add(bundle, new_value), else: bundle
@@ -127,6 +128,15 @@ defmodule Indexed.Actions.Put do
       end
 
     UniquesBundle.put(bundle, put.index.index_ref, put.entity_name, prefilter, field_name)
+
+    # If prefilter is a view, tell anyone subscribed about uniques being added
+    # or removed from the list.
+    if match?([_ | _], events) do
+      msg = %UniquesBundle.Change{prefilter: prefilter, events: events, field_name: field_name}
+      maybe_broadcast(put, prefilter, [:uniques], msg)
+    end
+
+    bundle
   end
 
   # Get and update global (prefilter nil) uniques for the field_name.

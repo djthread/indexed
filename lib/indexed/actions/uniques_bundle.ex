@@ -16,17 +16,40 @@ defmodule Indexed.UniquesBundle do
 
   1. Map of discrete values to their occurrence counts.
   2. List of discrete values. (Keys of #1's map.)
-  3. A boolean which is true when the list of keys has been updated and
-     should be saved.
+  3. A list of events which occurred when processing the bundle.
   4. A boolean which is true when `remove/2` is used and it has taken the
      last remaining instance of the given value.
   """
   @type t ::
-          {counts_map, list :: [any] | nil, list_updated? :: boolean,
-           last_instance_removed? :: boolean}
+          {counts_map, list :: [any] | nil, events :: [event], last_instance_removed? :: boolean}
 
   @typedoc "Occurrences of each value (map key) under a prefilter."
   @type counts_map :: %{any => non_neg_integer}
+
+  @typedoc """
+  Indicates that a value was added or removed from the bundle's list.
+  """
+  @type event :: {:add, any} | {:rm, any}
+
+  defmodule Change do
+    @moduledoc """
+    Describes changes made to a list of unique values.
+
+    Note that this is currently only used for view prefilters.
+    """
+    defstruct [:prefilter, :events, :field_name]
+
+    @typedoc """
+    * `:events` - List of events which occurred in the uniques.
+    * `:field_name` - Field name which the unique values are based on.
+    * `:prefilter` - View fingerprint.
+    """
+    @type t :: %__MODULE__{
+            events: [Indexed.UniquesBundle.event()],
+            field_name: atom,
+            prefilter: Indexed.View.fingerprint()
+          }
+  end
 
   # Get uniques_bundle - map and list versions of a unique values list
   @spec get(Indexed.t(), atom, Indexed.prefilter(), atom) :: t
@@ -39,56 +62,65 @@ defmodule Indexed.UniquesBundle do
       "UB: Getting #{key}: #{inspect(map)}"
     end)
 
-    {map, list, false, false}
+    {map, list, [], false}
   end
 
   @doc "Remove value from the uniques bundle."
   @spec remove(t, any) :: t
-  def remove({counts_map, list, list_updated?, last_instance_removed?}, value) do
+  def remove({counts_map, list, events, last_instance_removed?}, value) do
     case Map.fetch!(counts_map, value) do
-      1 -> {Map.delete(counts_map, value), list -- [value], true, true}
-      n -> {Map.put(counts_map, value, n - 1), list, list_updated?, last_instance_removed?}
+      1 -> {Map.delete(counts_map, value), list -- [value], [{:rm, value} | events], true}
+      n -> {Map.put(counts_map, value, n - 1), list, events, last_instance_removed?}
     end
   end
 
   @doc "Add a value to the uniques bundle."
   @spec add(t, any) :: t
-  def add({counts_map, list, list_updated?, last_instance_removed?}, value) do
+  def add({counts_map, list, events, last_instance_removed?}, value) do
     case counts_map[value] do
       nil ->
         first_bigger_idx = Enum.find_index(list, &(&1 > value))
         new_list = List.insert_at(list, first_bigger_idx || -1, value)
         new_counts_map = Map.put(counts_map, value, 1)
-        {new_counts_map, new_list, true, last_instance_removed?}
+        {new_counts_map, new_list, [{:add, value} | events], last_instance_removed?}
 
       orig_count ->
-        {Map.put(counts_map, value, orig_count + 1), list, list_updated?, last_instance_removed?}
+        {Map.put(counts_map, value, orig_count + 1), list, events, last_instance_removed?}
     end
   end
 
-  @doc "Store unique values for a field in a prefilter (as a list and mop)."
-  @spec put(t, :ets.tid(), atom, Indexed.prefilter(), atom) :: UniquesBundle.t()
+  @doc """
+  Store unique values for a field in a prefilter (as a list and mop).
+
+  If the `:new?` option is true, then the bundle will be inserted for sure.
+  """
+  @spec put(t, :ets.tid(), atom, Indexed.prefilter(), atom, keyword) :: UniquesBundle.t()
   def put(
-        {counts_map, list, list_updated?, _} = bundle,
+        {counts_map, list, events, _} = bundle,
         index_ref,
         entity_name,
         prefilter,
-        field_name
+        field_name,
+        opts \\ []
       ) do
     counts_key = Indexed.uniques_map_key(entity_name, prefilter, field_name)
     list_key = Indexed.uniques_list_key(entity_name, prefilter, field_name)
+    new? = !!opts[:new?]
+    list_updated? = match?([_ | _], events)
 
-    if list_updated? and Enum.empty?(list) and not is_nil(prefilter) and not is_binary(prefilter) do
+    if Enum.empty?(list) and list_updated? and not is_nil(prefilter) and not is_binary(prefilter) do
       Logger.debug(fn -> "UB: Dropping #{counts_key}" end)
+
       # This prefilter has ran out of records -- delete the ETS table.
-      # Note that for views (binary prefilter) we allow the uniques to remain
-      # in the empty state. They go when the view is destroyed.
+      # Note that for views (binary prefilter) and the global prefilter (nil)
+      # we allow the uniques to remain in the empty state. They go when the
+      # view or entire index, respectively, is destroyed.
       :ets.delete(index_ref, list_key)
       :ets.delete(index_ref, counts_key)
     else
       Logger.debug(fn -> "UB: Putting #{counts_key}: #{inspect(counts_map)}" end)
 
-      if list_updated?, do: :ets.insert(index_ref, {list_key, list})
+      if new? or list_updated?, do: :ets.insert(index_ref, {list_key, list})
       :ets.insert(index_ref, {counts_key, counts_map})
     end
 
