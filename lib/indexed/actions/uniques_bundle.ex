@@ -9,6 +9,7 @@ defmodule Indexed.UniquesBundle do
   of these values.
   """
   alias __MODULE__
+  require Logger
 
   @typedoc """
   A 3-element tuple defines unique values under a prefilter:
@@ -32,6 +33,12 @@ defmodule Indexed.UniquesBundle do
   def get(index, entity_name, prefilter, field_name) do
     map = Indexed.get_uniques_map(index, entity_name, prefilter, field_name)
     list = Indexed.get_uniques_list(index, entity_name, prefilter, field_name)
+
+    Logger.debug(fn ->
+      key = Indexed.uniques_map_key(entity_name, prefilter, field_name)
+      "UB: Getting #{key}: #{inspect(map)}"
+    end)
+
     {map, list, false, false}
   end
 
@@ -68,16 +75,19 @@ defmodule Indexed.UniquesBundle do
         prefilter,
         field_name
       ) do
-    list_key = Indexed.uniques_list_key(entity_name, prefilter, field_name)
     counts_key = Indexed.uniques_map_key(entity_name, prefilter, field_name)
+    list_key = Indexed.uniques_list_key(entity_name, prefilter, field_name)
 
-    if list_updated? and Enum.empty?(list) and not is_binary(prefilter) do
+    if list_updated? and Enum.empty?(list) and not is_nil(prefilter) and not is_binary(prefilter) do
+      Logger.debug(fn -> "UB: Dropping #{counts_key}" end)
       # This prefilter has ran out of records -- delete the ETS table.
       # Note that for views (binary prefilter) we allow the uniques to remain
       # in the empty state. They go when the view is destroyed.
       :ets.delete(index_ref, list_key)
       :ets.delete(index_ref, counts_key)
     else
+      Logger.debug(fn -> "UB: Putting #{counts_key}: #{inspect(counts_map)}" end)
+
       if list_updated?, do: :ets.insert(index_ref, {list_key, list})
       :ets.insert(index_ref, {counts_key, counts_map})
     end

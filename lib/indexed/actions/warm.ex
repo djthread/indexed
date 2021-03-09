@@ -2,6 +2,7 @@ defmodule Indexed.Actions.Warm do
   @moduledoc "Holds internal state info during operations."
   alias Indexed.{Entity, UniquesBundle}
   alias __MODULE__
+  require Logger
 
   defstruct [:data_tuple, :entity_name, :index_ref]
 
@@ -69,6 +70,8 @@ defmodule Indexed.Actions.Warm do
 
         warm = %Warm{data_tuple: data_tuple, entity_name: entity_name, index_ref: index_ref}
 
+        Logger.debug("Warming #{entity_name}...")
+
         # Create and insert the caches for this entity: for each prefilter
         # configured, build & store indexes for each indexed field.
         # Internally, a `t:prefilter/0` refers to a `{:my_field, "possible
@@ -99,6 +102,10 @@ defmodule Indexed.Actions.Warm do
       warm_index(index_ref, entity_name, prefilter, field, data_tuple)
     end
 
+    Logger.debug(fn ->
+      "  * Putting index (PF #{pf_key || "nil"}) for #{inspect(Enum.map(fields, &elem(&1, 0)))}"
+    end)
+
     if is_nil(pf_key) do
       Enum.each(fields, &warm_index.(nil, &1, full_data))
 
@@ -119,6 +126,10 @@ defmodule Indexed.Actions.Warm do
 
       bundle = {counts_map, Enum.sort(Enum.uniq(list)), true, false}
       UniquesBundle.put(bundle, index_ref, entity_name, nil, pf_key)
+
+      Logger.debug(fn ->
+        "--> Putting UB (for #{pf_key}) with #{map_size(counts_map)} elements."
+      end)
 
       # For each value found for the prefilter, create a set of indexes.
       Enum.each(grouped, fn {pf_val, data} ->
@@ -176,6 +187,14 @@ defmodule Indexed.Actions.Warm do
         end)
 
       bundle = {counts_map, Enum.sort(Enum.uniq(list)), true, false}
+
+      Logger.debug(fn ->
+        """
+        --> Putting UB (PF #{inspect(prefilter)}, #{field_name}) \
+        with #{map_size(counts_map)} elements."\
+        """
+      end)
+
       UniquesBundle.put(bundle, index_ref, entity_name, prefilter, field_name)
     end)
   end

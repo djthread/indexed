@@ -44,26 +44,25 @@ defmodule IndexedPrefilterTest do
   end
 
   test "basic prefilter", %{index: index} do
-    assert {:ok,
-            %Paginator.Page{
-              entries: [
-                %Album{id: 2, label: "Hospital Records", media: "CD", artist: "Logistics"},
-                %Album{
-                  id: 3,
-                  label: "Hospital Records",
-                  media: "FLAC",
-                  artist: "London Elektricity"
-                },
-                %Album{id: 5, label: "Hospital Records", media: "FLAC", artist: "S.P.Y"}
-              ],
-              metadata: %Paginator.Page.Metadata{
-                after: nil,
-                before: nil,
-                limit: 10,
-                total_count: nil,
-                total_count_cap_exceeded: false
-              }
-            }} ==
+    assert %Paginator.Page{
+             entries: [
+               %Album{id: 2, label: "Hospital Records", media: "CD", artist: "Logistics"},
+               %Album{
+                 id: 3,
+                 label: "Hospital Records",
+                 media: "FLAC",
+                 artist: "London Elektricity"
+               },
+               %Album{id: 5, label: "Hospital Records", media: "FLAC", artist: "S.P.Y"}
+             ],
+             metadata: %Paginator.Page.Metadata{
+               after: nil,
+               before: nil,
+               limit: 10,
+               total_count: nil,
+               total_count_cap_exceeded: false
+             }
+           } ==
              Indexed.paginate(index, :albums,
                order_field: :artist,
                order_direction: :asc,
@@ -181,20 +180,19 @@ defmodule IndexedPrefilterTest do
     end
 
     test "basic prefilter", %{album: album, index: index} do
-      assert {:ok,
-              %Paginator.Page{
-                entries: [
-                  ^album,
-                  %Album{id: 2, label: "Hospital Records", media: "CD", artist: "Logistics"},
-                  %Album{
-                    id: 3,
-                    label: "Hospital Records",
-                    media: "FLAC",
-                    artist: "London Elektricity"
-                  },
-                  %Album{id: 5, label: "Hospital Records", media: "FLAC", artist: "S.P.Y"}
-                ]
-              }} =
+      assert %Paginator.Page{
+               entries: [
+                 ^album,
+                 %Album{id: 2, label: "Hospital Records", media: "CD", artist: "Logistics"},
+                 %Album{
+                   id: 3,
+                   label: "Hospital Records",
+                   media: "FLAC",
+                   artist: "London Elektricity"
+                 },
+                 %Album{id: 5, label: "Hospital Records", media: "FLAC", artist: "S.P.Y"}
+               ]
+             } =
                Indexed.paginate(index, :albums,
                  order_field: :artist,
                  order_direction: :asc,

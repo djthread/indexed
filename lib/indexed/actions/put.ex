@@ -2,6 +2,7 @@ defmodule Indexed.Actions.Put do
   @moduledoc "An index action where a record is being added or updated."
   alias Indexed.{Entity, UniquesBundle, View}
   alias __MODULE__
+  require Logger
 
   defstruct [:current_view, :entity_name, :index, :previous, :pubsub, :record]
 
@@ -37,6 +38,8 @@ defmodule Indexed.Actions.Put do
       record: record
     }
 
+    Logger.debug(fn -> "Putting into #{entity_name}: #{record.id}..." end)
+
     # Update the record itself (by id).
     :ets.insert(entity.ref, {record.id, record})
 
@@ -47,6 +50,8 @@ defmodule Indexed.Actions.Put do
         update_all_uniques(put, pf_opts[:maintain_unique] || [], nil, false)
 
       {pf_key, pf_opts} ->
+        Logger.debug(fn -> "--> Getting UB for #{entity_name} prefilter nil, field: #{pf_key}" end)
+
         # Get global (prefilter nil) uniques bundle.
         {map, list, _, _} = bundle = UniquesBundle.get(index, entity_name, nil, pf_key)
         record_value = Map.get(record, pf_key)
@@ -88,6 +93,10 @@ defmodule Indexed.Actions.Put do
   @spec update_all_uniques(t, [atom], Indexed.prefilter(), boolean) :: :ok
   defp update_all_uniques(put, maintain_unique, prefilter, new_value?) do
     Enum.each(maintain_unique, fn field_name ->
+      Logger.debug(fn ->
+        "--> Updating uniques for PF #{inspect(prefilter)}, field: #{field_name}"
+      end)
+
       prev_in_pf? = put.previous && under_prefilter?(put, put.previous, prefilter)
       this_in_pf? = under_prefilter?(put, put.record, prefilter)
 
@@ -157,6 +166,10 @@ defmodule Indexed.Actions.Put do
     %{previous: previous, record: record} = put
 
     Enum.each(fields, fn {field_name, _} = field ->
+      Logger.debug(fn ->
+        "--> Updating index for PF #{inspect(prefilter)}, field: #{field_name}"
+      end)
+
       this_under_pf = under_prefilter?(put, record, prefilter)
       prev_under_pf = previous && under_prefilter?(put, previous, prefilter)
       record_value = Map.get(record, field_name)
