@@ -51,6 +51,11 @@ defmodule Indexed.UniquesBundle do
           }
   end
 
+  @doc "Create a new uniques bundle."
+  @spec new(counts_map, [any] | nil, [event], boolean) :: t
+  def new(counts_map \\ %{}, list \\ [], events \\ [], last_instance_removed? \\ false),
+    do: {counts_map, list, events, last_instance_removed?}
+
   # Get uniques_bundle - map and list versions of a unique values list
   @spec get(Indexed.t(), atom, Indexed.prefilter(), atom) :: t
   def get(index, entity_name, prefilter, field_name) do
@@ -90,7 +95,7 @@ defmodule Indexed.UniquesBundle do
   end
 
   @doc """
-  Store unique values for a field in a prefilter (as a list and mop).
+  Store unique values for a field in a prefilter (as a list and map).
 
   If the `:new?` option is true, then the bundle will be inserted for sure.
   """
@@ -108,8 +113,11 @@ defmodule Indexed.UniquesBundle do
     new? = !!opts[:new?]
     list_updated? = match?([_ | _], events)
 
-    if Enum.empty?(list) and list_updated? and not is_nil(prefilter) and not is_binary(prefilter) do
-      Logger.debug(fn -> "UB: Dropping #{counts_key}" end)
+    # true if prefilter is field-based (eg `{:label, "Hospital Records"}`)
+    field_pf? = is_tuple(prefilter)
+
+    if not new? and field_pf? and Enum.empty?(list) do
+      Logger.debug("UB: Dropping #{counts_key}")
 
       # This prefilter has ran out of records -- delete the ETS table.
       # Note that for views (binary prefilter) and the global prefilter (nil)
@@ -118,9 +126,12 @@ defmodule Indexed.UniquesBundle do
       :ets.delete(index_ref, list_key)
       :ets.delete(index_ref, counts_key)
     else
-      Logger.debug(fn -> "UB: Putting #{counts_key}: #{inspect(counts_map)}" end)
+      Logger.debug("UB: Putting #{counts_key}: #{inspect(counts_map)}")
 
-      if new? or list_updated?, do: :ets.insert(index_ref, {list_key, list})
+      if new? or list_updated?,
+        do: :ets.insert(index_ref, {list_key, list}),
+        else: list
+
       :ets.insert(index_ref, {counts_key, counts_map})
     end
 

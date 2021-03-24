@@ -4,16 +4,18 @@ defmodule Indexed.Actions.Warm do
   alias __MODULE__
   require Logger
 
-  defstruct [:data_tuple, :entity_name, :index_ref]
+  defstruct [:data_tuple, :entity_name, :id_key, :index_ref]
 
   @typedoc """
   * `:data_tuple` - full input data set with order/direction hint
   * `:entity_name` - entity name atom (eg. `:cars`)
+  * `:id_key` - Primary key to use in indexes and for accessing the records.
   * `:index_ref` - ETS table reference for storing index data
   """
   @type t :: %__MODULE__{
           data_tuple: data_tuple,
           entity_name: atom,
+          id_key: any,
           index_ref: :ets.tid()
         }
 
@@ -37,6 +39,8 @@ defmodule Indexed.Actions.Warm do
   * `:fields` - List of field name atoms to index by. At least one required.
     * If field is a DateTime, use sort: `{:my_field, sort: :date_time}`.
     * Ascending and descending will be indexed for each field.
+  * `:id_key` - Primary key to use in indexes and for accessing the records of
+    this entity. Default: `:id`.
   * `:prefilters` - List of field name atoms which should be prefiltered on.
     This means that separate indexes will be managed for each unique value for
     each of these fields, across all records of this entity type. While field
@@ -60,15 +64,21 @@ defmodule Indexed.Actions.Warm do
       Map.new(args, fn {entity_name, opts} ->
         ref = :ets.new(entity_name, Indexed.ets_opts())
         fields = resolve_fields_opt(opts[:fields], entity_name)
+        id_key = opts[:id_key] || :id
         prefilter_configs = resolve_prefilters_opt(opts[:prefilters])
 
         {_dir, _field, full_data} =
           data_tuple = resolve_data_opt(opts[:data], entity_name, fields)
 
-        # Load the records into ETS, keyed by id.
-        Enum.each(full_data, &:ets.insert(ref, {&1.id, &1}))
+        # Load the records into ETS, keyed by :id or the :id_key field.
+        Enum.each(full_data, &:ets.insert(ref, {Map.get(&1, id_key), &1}))
 
-        warm = %Warm{data_tuple: data_tuple, entity_name: entity_name, index_ref: index_ref}
+        warm = %Warm{
+          data_tuple: data_tuple,
+          entity_name: entity_name,
+          id_key: id_key,
+          index_ref: index_ref
+        }
 
         Logger.debug("Warming #{entity_name}...")
 
@@ -81,7 +91,13 @@ defmodule Indexed.Actions.Warm do
           warm_prefilter(warm, prefilter_config, fields)
         end
 
-        {entity_name, %Entity{fields: fields, prefilters: prefilter_configs, ref: ref}}
+        {entity_name,
+         %Entity{
+           fields: fields,
+           id_key: id_key,
+           prefilters: prefilter_configs,
+           ref: ref
+         }}
       end)
 
     %Indexed{entities: entities, index_ref: index_ref}
@@ -99,12 +115,13 @@ defmodule Indexed.Actions.Warm do
 
     warm_index = fn prefilter, field, data ->
       data_tuple = {d_dir, d_name, data}
-      warm_index(index_ref, entity_name, prefilter, field, data_tuple)
+      warm_index(warm, prefilter, field, data_tuple)
     end
 
-    Logger.debug(fn ->
-      "  * Putting index (PF #{pf_key || "nil"}) for #{inspect(Enum.map(fields, &elem(&1, 0)))}"
-    end)
+    Logger.debug("""
+      * Putting index (PF #{pf_key || "nil"}) for \
+    #{inspect(Enum.map(fields, &elem(&1, 0)))}\
+    """)
 
     if is_nil(pf_key) do
       Enum.each(fields, &warm_index.(nil, &1, full_data))
@@ -124,12 +141,10 @@ defmodule Indexed.Actions.Warm do
           {Map.put(counts_map, pf_val, length(records)), [pf_val | list]}
         end)
 
-      bundle = {counts_map, Enum.sort(Enum.uniq(list)), true, false}
+      bundle = UniquesBundle.new(counts_map, Enum.sort(Enum.uniq(list)))
       UniquesBundle.put(bundle, index_ref, entity_name, nil, pf_key, new?: true)
 
-      Logger.debug(fn ->
-        "--> Putting UB (for #{pf_key}) with #{map_size(counts_map)} elements."
-      end)
+      Logger.debug("--> Putting UB (for #{pf_key}) with #{map_size(counts_map)} elements.")
 
       # For each value found for the prefilter, create a set of indexes.
       Enum.each(grouped, fn {pf_val, data} ->
@@ -141,28 +156,28 @@ defmodule Indexed.Actions.Warm do
   end
 
   @doc "Create the asc and desc indexes for one field."
-  @spec warm_index(:ets.tid(), atom, Indexed.prefilter(), Entity.field(), data_tuple()) :: true
+  @spec warm_index(t, Indexed.prefilter(), Entity.field(), data_tuple()) :: true
   # Data direction hint matches this field -- no need to sort.
-  def warm_index(ref, entity_name, prefilter, {name, _sort_hint}, {data_dir, name, data}) do
-    data_ids = id_list(data)
+  def warm_index(warm, prefilter, {name, _sort_hint}, {data_dir, name, data}) do
+    data_ids = id_list(data, warm.id_key)
 
-    asc_key = Indexed.index_key(entity_name, prefilter, name, :asc)
+    asc_key = Indexed.index_key(warm.entity_name, prefilter, name, :asc)
     asc_ids = if data_dir == :asc, do: data_ids, else: Enum.reverse(data_ids)
-    desc_key = Indexed.index_key(entity_name, prefilter, name, :desc)
+    desc_key = Indexed.index_key(warm.entity_name, prefilter, name, :desc)
     desc_ids = if data_dir == :desc, do: data_ids, else: Enum.reverse(data_ids)
 
-    :ets.insert(ref, {asc_key, asc_ids})
-    :ets.insert(ref, {desc_key, desc_ids})
+    :ets.insert(warm.index_ref, {asc_key, asc_ids})
+    :ets.insert(warm.index_ref, {desc_key, desc_ids})
   end
 
   # Data direction hint does NOT match this field -- sorting needed.
-  def warm_index(ref, entity_name, prefilter, {name, _} = field, {_, _, data}) do
-    asc_key = Indexed.index_key(entity_name, prefilter, name, :asc)
-    desc_key = Indexed.index_key(entity_name, prefilter, name, :desc)
-    asc_ids = data |> Enum.sort(Warm.record_sort_fn(field)) |> id_list()
+  def warm_index(warm, prefilter, {name, _} = field, {_, _, data}) do
+    asc_key = Indexed.index_key(warm.entity_name, prefilter, name, :asc)
+    desc_key = Indexed.index_key(warm.entity_name, prefilter, name, :desc)
+    asc_ids = data |> Enum.sort(Warm.record_sort_fn(field)) |> id_list(warm.id_key)
 
-    :ets.insert(ref, {asc_key, asc_ids})
-    :ets.insert(ref, {desc_key, Enum.reverse(asc_ids)})
+    :ets.insert(warm.index_ref, {asc_key, asc_ids})
+    :ets.insert(warm.index_ref, {desc_key, Enum.reverse(asc_ids)})
   end
 
   @doc "From a field, make a compare function, suitable for `Enum.sort/2`."
@@ -179,23 +194,22 @@ defmodule Indexed.Actions.Warm do
           :ok
   defp store_all_uniques(index_ref, entity_name, prefilter, pf_opts, data) do
     Enum.each(pf_opts[:maintain_unique] || [], fn field_name ->
-      {counts_map, list} =
-        Enum.reduce(data, {%{}, []}, fn record, {counts_map, list} ->
+      counts_map =
+        Enum.reduce(data, %{}, fn record, counts_map ->
           val = Map.get(record, field_name)
           num = Map.get(counts_map, val, 0) + 1
-          {Map.put(counts_map, val, num), [val | list]}
+          Map.put(counts_map, val, num)
         end)
 
-      bundle = {counts_map, Enum.sort(Enum.uniq(list)), true, false}
+      list = counts_map |> Map.keys() |> Enum.sort()
+      bundle = UniquesBundle.new(counts_map, list)
 
-      Logger.debug(fn ->
-        """
-        --> Putting UB (PF #{inspect(prefilter)}, #{field_name}) \
-        with #{map_size(counts_map)} elements."\
-        """
-      end)
+      Logger.debug("""
+      --> Putting UB (PF #{inspect(prefilter)}, #{field_name}) \
+      with #{map_size(counts_map)} elements."\
+      """)
 
-      UniquesBundle.put(bundle, index_ref, entity_name, prefilter, field_name)
+      UniquesBundle.put(bundle, index_ref, entity_name, prefilter, field_name, new?: true)
     end)
   end
 
@@ -244,9 +258,9 @@ defmodule Indexed.Actions.Warm do
       else: [{nil, []} | prefilters]
   end
 
-  @doc "Return a list of all `:id` elements from the `collection`."
-  @spec id_list([Indexed.record()]) :: [Indexed.id()]
-  def id_list(collection) do
-    Enum.map(collection, & &1.id)
+  @doc "Return a list of all ids from the `collection`."
+  @spec id_list([Indexed.record()], any) :: [Indexed.id()]
+  def id_list(collection, id_key) do
+    Enum.map(collection, &Map.get(&1, id_key))
   end
 end

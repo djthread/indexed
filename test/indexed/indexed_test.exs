@@ -2,6 +2,10 @@ defmodule Car do
   defstruct [:id, :make, :inserted_at]
 end
 
+defmodule CarWithKeyId do
+  defstruct [:key, :make, :inserted_at]
+end
+
 defmodule IndexedTest do
   use ExUnit.Case
 
@@ -212,5 +216,20 @@ defmodule IndexedTest do
 
     assert [%{id: 2}, %{id: 3}, %{id: 1}] =
              Indexed.get_records(index, :cars, nil, :inserted_at, :desc)
+  end
+
+  test "id_key option" do
+    cars = [%CarWithKeyId{key: "cool", make: "Mazda"}]
+
+    index = Indexed.warm(cars: [fields: [:make], id_key: :key, data: {:asc, :make, cars}])
+
+    Indexed.put(index, :cars, %CarWithKeyId{key: "tez", make: "Tesla"})
+
+    assert %CarWithKeyId{key: "cool", make: "Mazda"} == Indexed.get(index, :cars, "cool")
+    assert %CarWithKeyId{key: "tez", make: "Tesla"} == Indexed.get(index, :cars, "tez")
+
+    Indexed.put(index, :cars, %CarWithKeyId{key: "tez", make: "Something Else"})
+
+    assert %CarWithKeyId{key: "tez", make: "Something Else"} == Indexed.get(index, :cars, "tez")
   end
 end

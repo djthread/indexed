@@ -1,9 +1,11 @@
 defmodule Indexed.Entity do
   @moduledoc "Configuration for a type of thing to be indexed."
-  defstruct fields: [], prefilters: [], ref: nil
+  defstruct fields: [], id_key: :id, prefilters: [], ref: nil
 
   @typedoc """
   * `:fields` - List of `t:field/0`s to be indexed for this entity.
+  * `:id_key` - Primary key to use in indexes and for accessing the records.
+    Default: `:id`.
   * `:prefilters` - List of tuples indicating which fields should be
     prefiltered on. This means that separate indexes will be managed for each
     unique value for each of these fields, across all records of this entity
@@ -18,6 +20,7 @@ defmodule Indexed.Entity do
   """
   @type t :: %__MODULE__{
           fields: [field],
+          id_key: any,
           prefilters: [prefilter_config],
           ref: :ets.tid()
         }

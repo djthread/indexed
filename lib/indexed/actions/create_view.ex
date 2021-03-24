@@ -112,9 +112,7 @@ defmodule Indexed.Actions.CreateView do
       map_key = Indexed.uniques_map_key(entity_name, fingerprint, field_name)
       list_key = Indexed.uniques_list_key(entity_name, fingerprint, field_name)
 
-      Logger.debug(fn ->
-        "  * Saving #{field_name} uniques with #{map_size(counts_map)} values."
-      end)
+      Logger.debug("  * Saving #{field_name} uniques with #{map_size(counts_map)} values.")
 
       :ets.insert(index.index_ref, {map_key, counts_map})
       :ets.insert(index.index_ref, {list_key, list})
@@ -142,7 +140,7 @@ defmodule Indexed.Actions.CreateView do
       asc_key = Indexed.index_key(entity_name, fingerprint, field_name, :asc)
       desc_key = Indexed.index_key(entity_name, fingerprint, field_name, :desc)
 
-      Logger.debug(fn -> "  * Saving #{field_name} index with #{length(sorted_ids)} ids." end)
+      Logger.debug("  * Saving #{field_name} index with #{length(sorted_ids)} ids.")
 
       :ets.insert(index.index_ref, {asc_key, sorted_ids})
       :ets.insert(index.index_ref, {desc_key, Enum.reverse(sorted_ids)})
