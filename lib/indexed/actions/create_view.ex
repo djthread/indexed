@@ -36,6 +36,7 @@ defmodule Indexed.Actions.CreateView do
 
     # Get current view map to ensure we're not creating an existing one.
     views_key = Indexed.views_key(entity_name)
+
     views = Indexed.get_index(index, views_key, %{})
 
     # Any pre-sorted field will do. At least we won't need to sort this one.
@@ -43,7 +44,7 @@ defmodule Indexed.Actions.CreateView do
 
     with false <- Map.has_key?(views, fingerprint),
          ids when is_list(ids) <-
-           Indexed.get_index(index, entity_name, prefilter, order_field, :asc) do
+           Indexed.get_index(index, entity_name, prefilter, order_field, :asc) || [] do
       {view_ids, counts_map_map} = gather_records_and_uniques(index, entity_name, ids, opts)
       save_uniques(index, entity_name, fingerprint, counts_map_map, opts)
       save_indexes(index, entity_name, entity, fingerprint, view_ids, order_field)
