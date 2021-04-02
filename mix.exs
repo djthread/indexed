@@ -53,10 +53,7 @@ defmodule Indexed.MixProject do
       {:excoveralls, "~> 0.13.3", only: :test},
       {:ex_doc, "~> 0.23", only: :dev, runtime: false},
       {:mix_test_watch, "~> 1.0", only: :dev, runtime: false},
-      # Will revert this when a new hex version is cut with my change
-      # https://github.com/duffelhq/paginator/pull/96
-      # {:paginator, "~> 1.0"},
-      {:paginator, github: "djthread/paginator", branch: "dialyzer-fix"},
+      {:paginator, "~> 1.0"},
       {:phoenix_pubsub, "~> 2.0", optional: true}
     ]
   end
