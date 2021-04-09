@@ -27,7 +27,7 @@ defmodule Indexed.MixProject do
       # Docs
       name: "Indexed",
       source_url: "https://github.com/instinctscience/indexed",
-      homepage_url: "https://www.instinctscripts.vet/",
+      homepage_url: "https://github.com/instinctscience/indexed",
       docs: [
         main: "Indexed",
         extras: ["README.md"]
