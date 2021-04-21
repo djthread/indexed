@@ -99,7 +99,7 @@ defmodule Indexed.Actions.Put do
     Enum.each(maintain_unique, fn field_name ->
       Logger.debug("--> Updating uniques for PF #{inspect(prefilter)}, field: #{field_name}")
 
-      prev_in_pf? = put.previous && under_prefilter?(put, put.previous, prefilter)
+      prev_in_pf? = !!(put.previous && under_prefilter?(put, put.previous, prefilter))
       this_in_pf? = under_prefilter?(put, put.record, prefilter)
 
       bundle =
@@ -119,12 +119,17 @@ defmodule Indexed.Actions.Put do
   defp update_uniques(put, prefilter, field_name, bundle, prev_in_pf?, this_in_pf?) do
     new_value = Map.get(put.record, field_name)
     previous_value = put.previous && Map.get(put.previous, field_name)
+    noop? = prev_in_pf? and this_in_pf? and new_value == previous_value
 
     {_, _, events, _} =
       bundle =
       if put.previous do
-        bundle = if prev_in_pf?, do: UniquesBundle.remove(bundle, previous_value), else: bundle
-        if this_in_pf?, do: UniquesBundle.add(bundle, new_value), else: bundle
+        bundle =
+          if not noop? and prev_in_pf?,
+            do: UniquesBundle.remove(bundle, previous_value),
+            else: bundle
+
+        if not noop? and this_in_pf?, do: UniquesBundle.add(bundle, new_value), else: bundle
       else
         UniquesBundle.add(bundle, new_value)
       end
