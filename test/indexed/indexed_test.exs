@@ -60,7 +60,7 @@ defmodule IndexedTest do
   end
 
   test "index_key" do
-    assert "idx_cars[]color_asc" == Indexed.index_key("cars", nil, "color")
+    assert "idx_cars[]asc_color" == Indexed.index_key("cars", nil, "color")
   end
 
   describe "get_index" do

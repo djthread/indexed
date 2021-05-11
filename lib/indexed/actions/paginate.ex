@@ -59,14 +59,14 @@ defmodule Indexed.Actions.Paginate do
   """
   @spec run(Indexed.t(), atom, keyword) :: Paginator.Page.t() | nil
   def run(index, entity_name, params) do
-    {order_dir, order_field} =
-      order_hint =
+    order_hint =
       if params[:order_by],
         do: Indexed.Helpers.normalize_order_hint(params[:order_by]),
         else: raise(":order_by required")
 
     pf = params[:prefilter]
-    cursor_fields = [{order_field, order_dir}, {:id, :asc}]
+
+    cursor_fields = Enum.map(order_hint ++ [asc: :id], fn {dir, field} -> {field, dir} end)
 
     with ordered_ids when is_list(ordered_ids) <-
            Indexed.get_index(index, entity_name, pf, order_hint) do

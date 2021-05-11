@@ -30,7 +30,8 @@ defmodule Indexed do
   @type views :: %{String.t() => DateTime.t()}
 
   @typedoc "A parameter to indicate a sort field and optionally direction."
-  @type order_hint :: field_name :: atom | {direction :: :asc | :desc, field_name :: atom}
+  @type order_hint ::
+          atom | {direction :: :asc | :desc, field_name :: atom} | [{:asc | :desc, atom}]
 
   defstruct entities: %{}, index_ref: nil
 
@@ -113,8 +114,13 @@ defmodule Indexed do
   @doc "Cache key for a given entity, field and direction."
   @spec index_key(atom, prefilter, order_hint) :: String.t()
   def index_key(entity_name, prefilter, order_hint) do
-    {direction, field_name} = Indexed.Helpers.normalize_order_hint(order_hint)
-    "idx_#{entity_name}#{prefilter_id(prefilter)}#{field_name}_#{direction}"
+    sort_str =
+      order_hint
+      |> Indexed.Helpers.normalize_order_hint()
+      |> Enum.map(fn {d, n} -> "#{d}_#{n}" end)
+      |> Enum.join(",")
+
+    "idx_#{entity_name}#{prefilter_id(prefilter)}#{sort_str}"
   end
 
   @doc """
