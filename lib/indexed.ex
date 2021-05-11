@@ -29,14 +29,17 @@ defmodule Indexed do
   @typedoc "Map held in ETS - tracks all views and their created timestamps."
   @type views :: %{String.t() => DateTime.t()}
 
+  @typedoc "A parameter to indicate a sort field and optionally direction."
+  @type order_hint :: field_name :: atom | {direction :: :asc | :desc, field_name :: atom}
+
   defstruct entities: %{}, index_ref: nil
 
   @typedoc """
   * `:entities` - Map of entity name keys to `t:Indexed.Entity.t/0`
   * `:index_ref` - ETS table reference for the indexes.
   """
-  @type t :: %__MODULE__{
-          entities: %{atom => Entity.t()},
+  @type t :: %Indexed{
+          entities: %{optional(atom) => Entity.t()},
           index_ref: :ets.tid()
         }
 
@@ -61,9 +64,9 @@ defmodule Indexed do
   end
 
   @doc "Get an index data structure."
-  @spec get_index(t, atom, prefilter, atom, :asc | :desc) :: list | map | nil
-  def get_index(index, entity_name, prefilter, order_field, order_dir) do
-    get_index(index, index_key(entity_name, prefilter, order_field, order_dir))
+  @spec get_index(t, atom, prefilter, order_hint) :: list | map | nil
+  def get_index(index, entity_name, prefilter, order_hint) do
+    get_index(index, index_key(entity_name, prefilter, order_hint))
   end
 
   @doc "Get an index data structure by key."
@@ -100,17 +103,17 @@ defmodule Indexed do
   `prefilter` - 2-element tuple (`t:prefilter/0`) indicating which
   sub-section of the data should be queried. Default is `nil` - no prefilter.
   """
-  @spec get_records(t, atom, prefilter, atom, :asc | :desc) :: [record] | nil
-  def get_records(index, entity_name, prefilter, order_field, order_direction) do
-    with records when is_list(records) <-
-           get_index(index, entity_name, prefilter, order_field, order_direction) do
+  @spec get_records(t, atom, prefilter, order_hint) :: [record] | nil
+  def get_records(index, entity_name, prefilter, order_hint) do
+    with records when is_list(records) <- get_index(index, entity_name, prefilter, order_hint) do
       Enum.map(records, &get(index, entity_name, &1))
     end
   end
 
   @doc "Cache key for a given entity, field and direction."
-  @spec index_key(atom, prefilter, atom, :asc | :desc) :: String.t()
-  def index_key(entity_name, prefilter, field_name, direction) do
+  @spec index_key(atom, prefilter, order_hint) :: String.t()
+  def index_key(entity_name, prefilter, order_hint) do
+    {direction, field_name} = Indexed.Helpers.normalize_order_hint(order_hint)
     "idx_#{entity_name}#{prefilter_id(prefilter)}#{field_name}_#{direction}"
   end
 

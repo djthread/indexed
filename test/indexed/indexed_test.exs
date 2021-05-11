@@ -28,7 +28,7 @@ defmodule IndexedTest do
 
   test "get_records", %{index: index} do
     assert [%Car{id: 1, make: "Lamborghini"}, %Car{id: 2, make: "Mazda"}] ==
-             Indexed.get_records(index, :cars, nil, :make, :asc)
+             Indexed.get_records(index, :cars, nil, :make)
   end
 
   describe "put" do
@@ -60,16 +60,16 @@ defmodule IndexedTest do
   end
 
   test "index_key" do
-    assert "idx_cars[]color_asc" == Indexed.index_key("cars", nil, "color", :asc)
+    assert "idx_cars[]color_asc" == Indexed.index_key("cars", nil, "color")
   end
 
   describe "get_index" do
     test "happy", %{index: index} do
-      assert [2, 1] == Indexed.get_index(index, :cars, nil, :make, :desc)
+      assert [2, 1] == Indexed.get_index(index, :cars, nil, {:desc, :make})
     end
 
     test "raise on no such index", %{index: index} do
-      assert is_nil(Indexed.get_index(index, :cars, nil, :whoops, :desc))
+      assert is_nil(Indexed.get_index(index, :cars, nil, {:desc, :whoops}))
     end
   end
 
@@ -89,18 +89,17 @@ defmodule IndexedTest do
                  total_count: nil,
                  total_count_cap_exceeded: false
                }
-             } =
-               Indexed.paginate(index, :cars, limit: 2, order_field: :make, order_direction: :desc)
+             } = Indexed.paginate(index, :cars, limit: 2, order_by: {:desc, :make})
     end
 
     test "no ref" do
       assert_raise ArgumentError, fn ->
-        Indexed.paginate(%Indexed{}, :cars, limit: 2, order_field: :balh)
+        Indexed.paginate(%Indexed{}, :cars, limit: 2, order_by: :balh)
       end
     end
 
     test "no such index", %{index: index} do
-      assert is_nil(Indexed.paginate(index, "what", limit: 2, order_field: :lol))
+      assert is_nil(Indexed.paginate(index, "what", limit: 2, order_by: :lol))
     end
   end
 
@@ -142,7 +141,7 @@ defmodule IndexedTest do
     assert %Car{id: 3, make: "Tesla"} = Indexed.get(index, :cars, 3)
 
     assert [%Car{make: "Lambo"}, %Car{make: "Mazda"}, %Car{make: "Tesla"}] =
-             Indexed.get_records(index, :cars, nil, :make, :asc)
+             Indexed.get_records(index, :cars, nil, :make)
 
     after_cursor = "g3QAAAACZAACaWRhAmQABG1ha2VtAAAABU1hemRh"
 
@@ -158,8 +157,7 @@ defmodule IndexedTest do
                total_count: nil,
                total_count_cap_exceeded: false
              }
-           } =
-             Indexed.paginate(index, :cars, limit: 2, order_field: :make, order_direction: :desc)
+           } = Indexed.paginate(index, :cars, limit: 2, order_by: {:desc, :make})
 
     assert %Paginator.Page{
              entries: [
@@ -177,8 +175,7 @@ defmodule IndexedTest do
                after: after_cursor,
                limit: 2,
                total_count: nil,
-               order_field: :make,
-               order_direction: :desc
+               order_by: {:desc, :make}
              )
   end
 
@@ -215,7 +212,7 @@ defmodule IndexedTest do
     })
 
     assert [%{id: 2}, %{id: 3}, %{id: 1}] =
-             Indexed.get_records(index, :cars, nil, :inserted_at, :desc)
+             Indexed.get_records(index, :cars, nil, {:desc, :inserted_at})
   end
 
   test "id_key option" do

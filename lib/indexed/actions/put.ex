@@ -222,8 +222,8 @@ defmodule Indexed.Actions.Put do
   # is entering or leaving the prefilter.
   @spec put_index(t, Entity.field(), Indexed.prefilter(), [:remove | :add], boolean) :: :ok
   defp put_index(put, {field_name, _} = field, prefilter, actions, newly_seen_value?) do
-    asc_key = Indexed.index_key(put.entity_name, prefilter, field_name, :asc)
-    desc_key = Indexed.index_key(put.entity_name, prefilter, field_name, :desc)
+    asc_key = Indexed.index_key(put.entity_name, prefilter, field_name)
+    desc_key = Indexed.index_key(put.entity_name, prefilter, {:desc, field_name})
 
     desc_ids = fn desc_key ->
       if newly_seen_value?, do: [], else: Indexed.get_index(put.index, desc_key)

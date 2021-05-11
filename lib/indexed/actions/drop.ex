@@ -87,8 +87,8 @@ defmodule Indexed.Actions.Drop do
     %{fields: fields} = Map.fetch!(drop.index.entities, drop.entity_name)
 
     Enum.each(fields, fn {field_name, _} ->
-      asc_key = Indexed.index_key(drop.entity_name, prefilter, field_name, :asc)
-      desc_key = Indexed.index_key(drop.entity_name, prefilter, field_name, :desc)
+      asc_key = Indexed.index_key(drop.entity_name, prefilter, field_name)
+      desc_key = Indexed.index_key(drop.entity_name, prefilter, {:desc, field_name})
 
       :ets.delete(drop.index.index_ref, asc_key)
       :ets.delete(drop.index.index_ref, desc_key)
@@ -132,8 +132,8 @@ defmodule Indexed.Actions.Drop do
   defp drop_from_index_for_fields(drop, prefilter, fields) do
     Enum.each(fields, fn {field_name, _} ->
       if under_prefilter?(drop, drop.record, prefilter) do
-        asc_key = Indexed.index_key(drop.entity_name, prefilter, field_name, :asc)
-        desc_key = Indexed.index_key(drop.entity_name, prefilter, field_name, :desc)
+        asc_key = Indexed.index_key(drop.entity_name, prefilter, field_name)
+        desc_key = Indexed.index_key(drop.entity_name, prefilter, {:desc, field_name})
         new_desc_ids = Indexed.get_index(drop.index, desc_key) -- [id_value(drop)]
 
         :ets.insert(drop.index.index_ref, {desc_key, new_desc_ids})

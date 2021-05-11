@@ -35,8 +35,8 @@ defmodule Indexed.Actions.DestroyView do
   @spec destroy_indexes(Indexed.t(), atom, View.fingerprint(), [atom]) :: :ok
   defp destroy_indexes(index, entity_name, fingerprint, fields) do
     Enum.each(fields, fn {field_name, _} ->
-      asc_key = Indexed.index_key(entity_name, fingerprint, field_name, :asc)
-      desc_key = Indexed.index_key(entity_name, fingerprint, field_name, :desc)
+      asc_key = Indexed.index_key(entity_name, fingerprint, field_name)
+      desc_key = Indexed.index_key(entity_name, fingerprint, {:desc, field_name})
       Enum.each([asc_key, desc_key], &:ets.delete(index.index_ref, &1))
     end)
   end

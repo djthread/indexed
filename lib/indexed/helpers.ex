@@ -6,4 +6,9 @@ defmodule Indexed.Helpers do
   def id_value(%{entity_name: entity_name, index: %{entities: entities}, record: record}) do
     Map.get(record, entities[entity_name].id_key)
   end
+
+  @doc "Convert a field-only order hint into a tuple one."
+  @spec normalize_order_hint(Indexed.order_hint()) :: {:asc | :desc, atom}
+  def normalize_order_hint({_direction, _field} = hint), do: hint
+  def normalize_order_hint(hint), do: {:asc, hint}
 end

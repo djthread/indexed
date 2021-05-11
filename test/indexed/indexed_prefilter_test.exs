@@ -64,8 +64,7 @@ defmodule IndexedPrefilterTest do
              }
            } ==
              Indexed.paginate(index, :albums,
-               order_field: :artist,
-               order_direction: :asc,
+               order_by: {:asc, :artist},
                prefilter: {:label, "Hospital Records"}
              )
   end
@@ -73,7 +72,7 @@ defmodule IndexedPrefilterTest do
   describe "sorted indexes by field are maintained" do
     test "basic list with prefilter", %{index: index} do
       assert [%{artist: "Logistics"}, %{artist: "London Elektricity"}, %{artist: "S.P.Y"}] =
-               Indexed.get_records(index, :albums, {:label, "Hospital Records"}, :artist, :asc)
+               Indexed.get_records(index, :albums, {:label, "Hospital Records"}, :artist)
     end
 
     test "when one is added", %{index: index} do
@@ -85,7 +84,7 @@ defmodule IndexedPrefilterTest do
                %{artist: "Logistics"},
                %{artist: "London Elektricity"},
                %{artist: "S.P.Y"}
-             ] = Indexed.get_records(index, :albums, {:label, "Hospital Records"}, :artist, :asc)
+             ] = Indexed.get_records(index, :albums, {:label, "Hospital Records"}, :artist)
     end
 
     test "when one is moved to another prefilter", %{index: index} do
@@ -98,7 +97,7 @@ defmodule IndexedPrefilterTest do
                %{artist: "Logistics"},
                %{artist: "London Elektricity"},
                %{artist: "S.P.Y"}
-             ] = Indexed.get_records(index, :albums, {:label, "Hospital Records"}, :artist, :asc)
+             ] = Indexed.get_records(index, :albums, {:label, "Hospital Records"}, :artist)
     end
 
     test "when a resort is needed within the same prefilter", %{index: index} do
@@ -109,7 +108,7 @@ defmodule IndexedPrefilterTest do
                %{artist: "Logistics"},
                %{artist: "S.P.Y"},
                %{artist: "Whiney"}
-             ] = Indexed.get_records(index, :albums, {:label, "Hospital Records"}, :artist, :asc)
+             ] = Indexed.get_records(index, :albums, {:label, "Hospital Records"}, :artist)
     end
   end
 
@@ -194,8 +193,7 @@ defmodule IndexedPrefilterTest do
                ]
              } =
                Indexed.paginate(index, :albums,
-                 order_field: :artist,
-                 order_direction: :asc,
+                 order_by: {:asc, :artist},
                  prefilter: {:label, "Hospital Records"}
                )
     end
@@ -248,7 +246,7 @@ defmodule IndexedPrefilterTest do
   end
 
   describe "drop" do
-    defp records(i, pf), do: Indexed.get_records(i, :albums, pf, :artist, :asc)
+    defp records(i, pf), do: Indexed.get_records(i, :albums, pf, :artist)
     defp list(i, pf), do: Indexed.get_uniques_list(i, :albums, pf, :media)
     defp map(i, pf), do: Indexed.get_uniques_map(i, :albums, pf, :media)
 

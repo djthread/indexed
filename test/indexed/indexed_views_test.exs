@@ -67,11 +67,11 @@ defmodule IndexedViewsTest do
       a1 = %Album{artist: "Logistics", id: 2, label: "Hospital Records", media: "CD"}
       a2 = %Album{artist: "London Elektricity", id: 3, label: "Hospital Records", media: "FLAC"}
 
-      assert [a1, a2] == get_records(index, :albums, fingerprint, :artist, :asc)
+      assert [a1, a2] == get_records(index, :albums, fingerprint, :artist)
       assert %{2 => 1, 3 => 1} == get_uniques_map(index, :albums, fingerprint, :id)
       assert [2, 3] == get_uniques_list(index, :albums, fingerprint, :id)
 
-      assert [a2, a1] == get_records(index, :albums, fingerprint, :media, :desc)
+      assert [a2, a1] == get_records(index, :albums, fingerprint, {:desc, :media})
     end
   end
 
@@ -87,7 +87,7 @@ defmodule IndexedViewsTest do
 
       a1 = %Album{artist: "Logistics", id: 2, label: "Hospital Records", media: "CD"}
       a2 = %Album{artist: "London Elektricity", id: 3, label: "Hospital Records", media: "FLAC"}
-      assert [a1, a2, album] == get_records(index, :albums, fingerprint, :artist, :asc)
+      assert [a1, a2, album] == get_records(index, :albums, fingerprint, :artist)
 
       assert [2, 3, 6] == get_uniques_list(index, :albums, fingerprint, :id)
       assert %{2 => 1, 3 => 1, 6 => 1} == get_uniques_map(index, :albums, fingerprint, :id)
@@ -106,7 +106,7 @@ defmodule IndexedViewsTest do
 
       a1 = %Album{artist: "Logistics", id: 2, label: "Hospital Records", media: "CD"}
       a2 = %Album{artist: "London Elektricity", id: 3, label: "Hospital Records", media: "FLAC"}
-      assert [a1, a2, album] == get_records(index, :albums, fingerprint, :artist, :asc)
+      assert [a1, a2, album] == get_records(index, :albums, fingerprint, :artist)
 
       assert [2, 3, 5] == get_uniques_list(index, :albums, fingerprint, :id)
       assert %{2 => 1, 3 => 1, 5 => 1} == get_uniques_map(index, :albums, fingerprint, :id)
@@ -122,7 +122,7 @@ defmodule IndexedViewsTest do
       assert_receive {Indexed, [:remove], %{fingerprint: fingerprint, id: 2}}
 
       a = %Album{artist: "London Elektricity", id: 3, label: "Hospital Records", media: "FLAC"}
-      assert [a] == get_records(index, :albums, fingerprint, :artist, :asc)
+      assert [a] == get_records(index, :albums, fingerprint, :artist)
 
       assert [3] == get_uniques_list(index, :albums, fingerprint, :id)
       assert %{3 => 1} == get_uniques_map(index, :albums, fingerprint, :id)
@@ -138,7 +138,7 @@ defmodule IndexedViewsTest do
       assert_receive {Indexed, [:remove], %{fingerprint: fingerprint, id: 2}}
 
       a1 = %Album{artist: "London Elektricity", id: 3, label: "Hospital Records", media: "FLAC"}
-      assert [a1] == get_records(index, :albums, fingerprint, :artist, :asc)
+      assert [a1] == get_records(index, :albums, fingerprint, :artist)
 
       assert [3] == get_uniques_list(index, :albums, fingerprint, :id)
       assert %{3 => 1} == get_uniques_map(index, :albums, fingerprint, :id)
@@ -154,7 +154,7 @@ defmodule IndexedViewsTest do
       assert_receive {Indexed, [:update], %{fingerprint: fingerprint, record: album}}
 
       a1 = %Album{artist: "London Elektricity", id: 3, label: "Hospital Records", media: "FLAC"}
-      assert [a1, album] == get_records(index, :albums, fingerprint, :artist, :asc)
+      assert [a1, album] == get_records(index, :albums, fingerprint, :artist)
 
       assert [2, 3] == get_uniques_list(index, :albums, fingerprint, :id)
       assert %{2 => 1, 3 => 1} == get_uniques_map(index, :albums, fingerprint, :id)
@@ -167,8 +167,8 @@ defmodule IndexedViewsTest do
     refute Map.has_key?(get_index(index, views_key(:albums)), fingerprint)
 
     should_be_nil = [
-      get_index(index, :albums, fingerprint, :artist, :asc),
-      get_index(index, :albums, fingerprint, :artist, :desc),
+      get_index(index, :albums, fingerprint, :artist),
+      get_index(index, :albums, fingerprint, {:desc, :artist}),
       get_index(index, uniques_map_key(:albums, fingerprint, :id)),
       get_index(index, uniques_list_key(:albums, fingerprint, :field_name))
     ]
@@ -190,7 +190,7 @@ defmodule IndexedViewsTest do
   end
 
   describe "drop" do
-    defp records(i, fp), do: Indexed.get_records(i, :albums, fp, :artist, :asc)
+    defp records(i, fp), do: Indexed.get_records(i, :albums, fp, :artist)
     defp list(i, fp), do: Indexed.get_uniques_list(i, :albums, fp, :id)
     defp map(i, fp), do: Indexed.get_uniques_map(i, :albums, fp, :id)
 

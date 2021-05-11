@@ -33,7 +33,7 @@ defmodule Indexed.Actions.Warm do
 
   * `:data` - List of maps (with id key) -- the data to index and cache.
     Required. May take one of the following forms:
-    * `{field, direction, list}` - data `list`, with a hint that it is already
+    * `{direction, field, list}` - data `list`, with a hint that it is already
       sorted by field (atom) and direction (:asc or :desc), `t:data_tuple/0`.
     * `list` - data list with unknown ordering; must be sorted for every field.
   * `:fields` - List of field name atoms to index by. At least one required.
@@ -161,9 +161,9 @@ defmodule Indexed.Actions.Warm do
   def warm_index(warm, prefilter, {name, _sort_hint}, {data_dir, name, data}) do
     data_ids = id_list(data, warm.id_key)
 
-    asc_key = Indexed.index_key(warm.entity_name, prefilter, name, :asc)
+    asc_key = Indexed.index_key(warm.entity_name, prefilter, name)
     asc_ids = if data_dir == :asc, do: data_ids, else: Enum.reverse(data_ids)
-    desc_key = Indexed.index_key(warm.entity_name, prefilter, name, :desc)
+    desc_key = Indexed.index_key(warm.entity_name, prefilter, {:desc, name})
     desc_ids = if data_dir == :desc, do: data_ids, else: Enum.reverse(data_ids)
 
     :ets.insert(warm.index_ref, {asc_key, asc_ids})
@@ -172,8 +172,8 @@ defmodule Indexed.Actions.Warm do
 
   # Data direction hint does NOT match this field -- sorting needed.
   def warm_index(warm, prefilter, {name, _} = field, {_, _, data}) do
-    asc_key = Indexed.index_key(warm.entity_name, prefilter, name, :asc)
-    desc_key = Indexed.index_key(warm.entity_name, prefilter, name, :desc)
+    asc_key = Indexed.index_key(warm.entity_name, prefilter, name)
+    desc_key = Indexed.index_key(warm.entity_name, prefilter, {:desc, name})
     asc_ids = data |> Enum.sort(Warm.record_sort_fn(field)) |> id_list(warm.id_key)
 
     :ets.insert(warm.index_ref, {asc_key, asc_ids})

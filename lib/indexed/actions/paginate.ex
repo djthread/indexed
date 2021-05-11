@@ -29,8 +29,10 @@ defmodule Indexed.Actions.Paginate do
 
     * `:after` - Fetch the records after this cursor.
     * `:before` - Fetch the records before this cursor.
-    * `:order_direction` - either `:asc` or `:desc`. Default `:asc`.
-    * `:order_field` - Field atom. (eg. `:updated_by`) Required.
+    * `:order_by` - `{direction, field_name}` tuple where `:direction` is
+      either `:asc` or `:desc` (default `:asc`). `:order_field` is a field name
+      atom (eg. `:updated_by`). Also allowed is the field name atom alone, in
+      which case `:asc` sort direction will be used.
     * `:filter` - An optional function which takes a record and returns a
       boolean, true if the record is desired in pagination. Default is `nil`
       where all records (in the selected prefilter) will be included.
@@ -57,13 +59,17 @@ defmodule Indexed.Actions.Paginate do
   """
   @spec run(Indexed.t(), atom, keyword) :: Paginator.Page.t() | nil
   def run(index, entity_name, params) do
-    order_dir = params[:order_direction] || :asc
-    order_field = params[:order_field] || raise ":order_field required"
+    {order_dir, order_field} =
+      order_hint =
+      if params[:order_by],
+        do: Indexed.Helpers.normalize_order_hint(params[:order_by]),
+        else: raise(":order_by required")
+
     pf = params[:prefilter]
     cursor_fields = [{order_field, order_dir}, {:id, :asc}]
 
     with ordered_ids when is_list(ordered_ids) <-
-           Indexed.get_index(index, entity_name, pf, order_field, order_dir) do
+           Indexed.get_index(index, entity_name, pf, order_hint) do
       filter = params[:filter]
       getter = fn id -> Indexed.get(index, entity_name, id) end
 

@@ -44,7 +44,7 @@ defmodule Indexed.Actions.CreateView do
 
     with false <- Map.has_key?(views, fingerprint),
          ids when is_list(ids) <-
-           Indexed.get_index(index, entity_name, prefilter, order_field, :asc) || [] do
+           Indexed.get_index(index, entity_name, prefilter, {:asc, order_field}) || [] do
       {view_ids, counts_map_map} = gather_records_and_uniques(index, entity_name, ids, opts)
       save_uniques(index, entity_name, fingerprint, counts_map_map, opts)
       save_indexes(index, entity_name, entity, fingerprint, view_ids, order_field)
@@ -138,8 +138,8 @@ defmodule Indexed.Actions.CreateView do
           do: view_ids,
           else: view_records |> Enum.sort(Warm.record_sort_fn(field)) |> Enum.map(& &1.id)
 
-      asc_key = Indexed.index_key(entity_name, fingerprint, field_name, :asc)
-      desc_key = Indexed.index_key(entity_name, fingerprint, field_name, :desc)
+      asc_key = Indexed.index_key(entity_name, fingerprint, {:asc, field_name})
+      desc_key = Indexed.index_key(entity_name, fingerprint, {:desc, field_name})
 
       Logger.debug("  * Saving #{field_name} index with #{length(sorted_ids)} ids.")
 
