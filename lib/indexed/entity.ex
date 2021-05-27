@@ -5,7 +5,8 @@ defmodule Indexed.Entity do
   @typedoc """
   * `:fields` - List of `t:field/0`s to be indexed for this entity.
   * `:id_key` - Primary key to use in indexes and for accessing the records.
-    Default: `:id`.
+    If set to a function, it will be invoked with the record in order to find
+    the id to use.  Default: `:id`.
   * `:prefilters` - List of tuples indicating which fields should be
     prefiltered on. This means that separate indexes will be managed for each
     unique value for each of these fields, across all records of this entity

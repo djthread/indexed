@@ -1,6 +1,6 @@
 defmodule Indexed.Actions.Warm do
   @moduledoc "Holds internal state info during operations."
-  alias Indexed.{Entity, UniquesBundle}
+  alias Indexed.{Entity, Helpers, UniquesBundle}
   alias __MODULE__
   require Logger
 
@@ -10,6 +10,7 @@ defmodule Indexed.Actions.Warm do
   * `:data_tuple` - full input data set with order/direction hint
   * `:entity_name` - entity name atom (eg. `:cars`)
   * `:id_key` - Primary key to use in indexes and for accessing the records.
+    See `t:Indexed.Entity.t/0`.
   * `:index_ref` - ETS table reference for storing index data
   """
   @type t :: %__MODULE__{
@@ -40,7 +41,7 @@ defmodule Indexed.Actions.Warm do
     * If field is a DateTime, use sort: `{:my_field, sort: :date_time}`.
     * Ascending and descending will be indexed for each field.
   * `:id_key` - Primary key to use in indexes and for accessing the records of
-    this entity. Default: `:id`.
+    this entity.  See `t:Indexed.Entity.t/0`. Default: `:id`.
   * `:prefilters` - List of field name atoms which should be prefiltered on.
     This means that separate indexes will be managed for each unique value for
     each of these fields, across all records of this entity type. While field
@@ -71,7 +72,7 @@ defmodule Indexed.Actions.Warm do
           data_tuple = resolve_data_opt(opts[:data], entity_name, fields)
 
         # Load the records into ETS, keyed by :id or the :id_key field.
-        Enum.each(full_data, &:ets.insert(ref, {Map.get(&1, id_key), &1}))
+        Enum.each(full_data, &:ets.insert(ref, {Helpers.id_value(&1, id_key), &1}))
 
         warm = %Warm{
           data_tuple: data_tuple,
@@ -261,6 +262,6 @@ defmodule Indexed.Actions.Warm do
   @doc "Return a list of all ids from the `collection`."
   @spec id_list([Indexed.record()], any) :: [Indexed.id()]
   def id_list(collection, id_key) do
-    Enum.map(collection, &Map.get(&1, id_key))
+    Enum.map(collection, &Helpers.id_value(&1, id_key))
   end
 end

@@ -3,7 +3,7 @@ defmodule Car do
 end
 
 defmodule CarWithKeyId do
-  defstruct [:key, :make, :inserted_at]
+  defstruct [:key, :xtra, :make, :inserted_at]
 end
 
 defmodule IndexedTest do
@@ -215,18 +215,30 @@ defmodule IndexedTest do
              Indexed.get_records(index, :cars, nil, {:desc, :inserted_at})
   end
 
-  test "id_key option" do
-    cars = [%CarWithKeyId{key: "cool", make: "Mazda"}]
+  describe "id_key option" do
+    test "with atom key name" do
+      cars = [%CarWithKeyId{key: "cool", make: "Mazda"}]
 
-    index = Indexed.warm(cars: [fields: [:make], id_key: :key, data: {:asc, :make, cars}])
+      index = Indexed.warm(cars: [fields: [:make], id_key: :key, data: {:asc, :make, cars}])
 
-    Indexed.put(index, :cars, %CarWithKeyId{key: "tez", make: "Tesla"})
+      Indexed.put(index, :cars, %CarWithKeyId{key: "tez", make: "Tesla"})
 
-    assert %CarWithKeyId{key: "cool", make: "Mazda"} == Indexed.get(index, :cars, "cool")
-    assert %CarWithKeyId{key: "tez", make: "Tesla"} == Indexed.get(index, :cars, "tez")
+      assert %CarWithKeyId{key: "cool", make: "Mazda"} == Indexed.get(index, :cars, "cool")
+      assert %CarWithKeyId{key: "tez", make: "Tesla"} == Indexed.get(index, :cars, "tez")
 
-    Indexed.put(index, :cars, %CarWithKeyId{key: "tez", make: "Something Else"})
+      Indexed.put(index, :cars, %CarWithKeyId{key: "tez", make: "Something Else"})
 
-    assert %CarWithKeyId{key: "tez", make: "Something Else"} == Indexed.get(index, :cars, "tez")
+      assert %CarWithKeyId{key: "tez", make: "Something Else"} == Indexed.get(index, :cars, "tez")
+    end
+
+    test "with function" do
+      make_id = &"#{&1.key}-#{&1.xtra}"
+
+      car = %CarWithKeyId{key: "cool", xtra: 2, make: "Mazda"}
+
+      index = Indexed.warm(cars: [fields: [:make], id_key: make_id, data: {:asc, :make, [car]}])
+
+      assert car == Indexed.get(index, :cars, make_id.(car))
+    end
   end
 end

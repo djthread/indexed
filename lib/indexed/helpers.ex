@@ -1,10 +1,24 @@
 defmodule Indexed.Helpers do
   @moduledoc "Helper functions for internal use."
 
-  @doc "Get the id of the record being operated on."
+  @doc """
+  Get the id of the record being operated on.
+
+  If the configured `:id_key` is a one-arity function, pass in the record to
+  build the id.
+  """
+  @spec id_value(map, any) :: any
+  def id_value(record, id_key) when is_function(id_key), do: id_key.(record)
+  def id_value(record, id_key), do: Map.get(record, id_key)
+
+  @doc """
+  Get the id of the record being operated on from an action state.
+
+  See `id_value/2`.
+  """
   @spec id_value(map) :: any
   def id_value(%{entity_name: entity_name, index: %{entities: entities}, record: record}) do
-    Map.get(record, entities[entity_name].id_key)
+    id_value(record, entities[entity_name].id_key)
   end
 
   @doc "Convert a field-only order hint into a tuple one."
