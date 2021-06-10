@@ -50,7 +50,7 @@ defmodule Indexed.MixProject do
     [
       {:credo, "~> 1.5", only: [:dev, :test], runtime: false},
       {:dialyxir, "~> 1.0", only: [:dev, :test], runtime: false},
-      {:excoveralls, "~> 0.13.3", only: :test},
+      {:excoveralls, "~> 0.14", only: :test},
       {:ex_doc, "~> 0.23", only: :dev, runtime: false},
       {:mix_test_watch, "~> 1.0", only: :dev, runtime: false},
       {:paginator, "~> 1.0"},

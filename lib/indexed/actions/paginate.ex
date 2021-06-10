@@ -39,6 +39,8 @@ defmodule Indexed.Actions.Paginate do
     * `:prefilter` - Two-element tuple, indicating the field name and value for
       the prefiltered index to be used. Default is `nil`, indicating that the
       index with the non-prefiltered, full list of records should be used.
+    * `:prepare` - An optional function which takes a record and returns a new
+      record to use -- both for the filter function and in the result.
 
     # * `:fetch_cursor_value_fun` function of arity 2 to lookup cursor values on returned records.
     # Defaults to `Paginator.default_fetch_cursor_value/2`
@@ -70,10 +72,16 @@ defmodule Indexed.Actions.Paginate do
 
     with ordered_ids when is_list(ordered_ids) <-
            Indexed.get_index(index, entity_name, pf, order_hint) do
-      filter = params[:filter]
-      getter = fn id -> Indexed.get(index, entity_name, id) end
+      getter = fn id ->
+        # Run the record through the prepare function, if defined.
+        case {params[:prepare], Indexed.get(index, entity_name, id)} do
+          {fun, record} when is_function(fun) -> fun.(record)
+          {_, record} -> record
+        end
+      end
 
-      paginator_opts = Keyword.merge(params, cursor_fields: cursor_fields, filter: filter)
+      paginator_opts =
+        Keyword.merge(params, cursor_fields: cursor_fields, filter: params[:filter])
 
       paginate(ordered_ids, getter, paginator_opts)
     end
