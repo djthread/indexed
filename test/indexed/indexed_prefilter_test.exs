@@ -75,6 +75,13 @@ defmodule IndexedPrefilterTest do
                Indexed.get_records(index, :albums, {:label, "Hospital Records"}, :artist)
     end
 
+    test "prefilter value nil", %{index: index} do
+      album = %Album{id: 6, label: nil, media: "FLAC", artist: "Guy Without a Label"}
+      Indexed.put(index, :albums, album)
+
+      assert [^album] = Indexed.get_records(index, :albums, {:label, nil}, :artist)
+    end
+
     test "when one is added", %{index: index} do
       album = %Album{id: 7, label: "Hospital Records", media: "CD", artist: "Danny Byrd"}
       Indexed.put(index, :albums, album)

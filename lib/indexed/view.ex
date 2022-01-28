@@ -61,11 +61,10 @@ defmodule Indexed.View do
       params
       |> Keyword.new()
       |> Enum.sort_by(&elem(&1, 0))
-      |> Enum.map(fn
+      |> Enum.map_join(":", fn
         {k, v} when is_binary(v) or is_atom(v) -> "#{k}.#{v}"
         {k, v} -> "#{k}.#{inspect(v)}"
       end)
-      |> Enum.join(":")
 
     :sha256
     |> :crypto.hash(string)

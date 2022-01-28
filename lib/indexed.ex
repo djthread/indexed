@@ -117,8 +117,7 @@ defmodule Indexed do
     sort_str =
       order_hint
       |> Indexed.Helpers.normalize_order_hint()
-      |> Enum.map(fn {d, n} -> "#{d}_#{n}" end)
-      |> Enum.join(",")
+      |> Enum.map_join(",", fn {d, n} -> "#{d}_#{n}" end)
 
     "idx_#{entity_name}#{prefilter_id(prefilter)}#{sort_str}"
   end

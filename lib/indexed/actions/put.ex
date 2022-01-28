@@ -28,7 +28,7 @@ defmodule Indexed.Actions.Put do
   Add or update a record, along with the indexes to reflect the change.
   """
   @spec run(Indexed.t(), atom, Indexed.record()) :: :ok
-  def run(index, entity_name, record) do
+  def run(index, entity_name, %{} = record) do
     %{fields: fields} = entity = Map.fetch!(index.entities, entity_name)
 
     put = %Put{

@@ -1,4 +1,4 @@
-use Mix.Config
+import Config
 
 logger_level =
   case String.upcase(System.get_env("LOG_LEVEL", "WARN")) do
