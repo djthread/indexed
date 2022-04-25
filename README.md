@@ -2,7 +2,7 @@
 
 Indexed is a tool for managing records in ETS.
 
-A record is a map with an `:id` key (perhaps an Ecto.Schema struct). An ETS
+A record is a map with an id (perhaps an Ecto.Schema struct). An ETS
 table stores all such records of a given entity, keyed by id.
 
 Configure and warm your cache with some data and get an `%Indexed{}` in
@@ -40,14 +40,22 @@ being required on the client.
 
 See `Indexed.Actions.Paginate` for more details.
 
+## Managed
+
+`Indexed.Managed` is a tool on top of the core Indexed functionality to allow a
+GenServer to more easily track a set of associated records, discretely. The
+`managed` macro declares an entity type and its children. Then, `manage/5` will
+recursively update the cache, traveling down the hierarchy of children. While
+other components of the library do not assume `Ecto.Schema` modules are being
+indexed, Managed does. Subscribing and unsubscribing to record updates by ID can
+be done automatically. Check the module documentation for more info.
+
 ## Installation
 
 ```elixir
 def deps do
   [
-    {:indexed,
-      git: "https://github.com/instinctscience/indexed.git",
-      branch: "main"}
+    {:indexed, "~> 0.0.1"}
   ]
 end
 ```
@@ -68,7 +76,7 @@ cars = [
 # sort option like `{:updated_at, sort: :date_time}`.
 index =
   Indexed.warm(
-    cars: [fields: [:make], data: {:asc, :make, cars}]
+    cars: [fields: [:make], data: cars]
   )
 
 %Car{id: 1, make: "Lamborghini"} = car = Indexed.get(index, :cars, 1)

@@ -6,7 +6,7 @@ defmodule Indexed.Actions.Drop do
   - For each prefilter, drop record from uniques.
   - Drop record itself from id-keyed lookup table.
   """
-  import Indexed.Helpers, only: [id_value: 1]
+  import Indexed.Helpers, only: [id: 1]
   alias Indexed.{Entity, UniquesBundle, View}
   alias __MODULE__
 
@@ -134,7 +134,7 @@ defmodule Indexed.Actions.Drop do
       if under_prefilter?(drop, drop.record, prefilter) do
         asc_key = Indexed.index_key(drop.entity_name, prefilter, field_name)
         desc_key = Indexed.index_key(drop.entity_name, prefilter, {:desc, field_name})
-        new_desc_ids = Indexed.get_index(drop.index, desc_key) -- [id_value(drop)]
+        new_desc_ids = Indexed.get_index(drop.index, desc_key) -- [id(drop)]
 
         :ets.insert(drop.index.index_ref, {desc_key, new_desc_ids})
         :ets.insert(drop.index.index_ref, {asc_key, Enum.reverse(new_desc_ids)})

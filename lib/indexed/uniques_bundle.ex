@@ -20,8 +20,12 @@ defmodule Indexed.UniquesBundle do
   4. A boolean which is true when `remove/2` is used and it has taken the
      last remaining instance of the given value.
   """
-  @type t ::
-          {counts_map, list :: [any] | nil, events :: [event], last_instance_removed? :: boolean}
+  @type t :: {
+          counts_map,
+          list :: [any] | nil,
+          events :: [event],
+          last_instance_removed? :: boolean
+        }
 
   @typedoc "Occurrences of each value (map key) under a prefilter."
   @type counts_map :: %{any => non_neg_integer}
@@ -37,7 +41,7 @@ defmodule Indexed.UniquesBundle do
 
     Note that this is currently only used for view prefilters.
     """
-    defstruct [:prefilter, :events, :field_name]
+    defstruct [:events, :field_name, :prefilter]
 
     @typedoc """
     * `:events` - List of events which occurred in the uniques.

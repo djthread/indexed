@@ -15,7 +15,16 @@ defmodule IndexedTest do
   ]
 
   setup do
-    [index: Indexed.warm(cars: [fields: [:make], data: {:asc, :make, @cars}])]
+    [
+      index:
+        Indexed.warm(
+          cars: [
+            fields: [:make],
+            data: {:asc, :make, @cars},
+            prefilters: [:make]
+          ]
+        )
+    ]
   end
 
   defp add_tesla(index),
@@ -33,14 +42,24 @@ defmodule IndexedTest do
 
   describe "put" do
     test "when already held", %{index: index} do
+      uniques_map = &Indexed.get_uniques_map(index, :cars, &1, :make)
+
+      assert %{"Lamborghini" => 1, "Mazda" => 1} == uniques_map.(nil)
+
       car = Indexed.get(index, :cars, 1)
       Indexed.put(index, :cars, %{car | make: "Lambo"})
+
       assert %Car{id: 1, make: "Lambo"} == Indexed.get(index, :cars, 1)
+      assert %{"Lambo" => 1, "Mazda" => 1} == uniques_map.(nil)
     end
 
     test "when not already held", %{index: index} do
+      uniques_map = &Indexed.get_uniques_map(index, :cars, &1, :make)
+
       Indexed.put(index, :cars, %Car{id: 4, make: "GM"})
+
       assert %Car{id: 4, make: "GM"} == Indexed.get(index, :cars, 4)
+      assert %{"Lamborghini" => 1, "Mazda" => 1, "GM" => 1} == uniques_map.(nil)
     end
   end
 
@@ -99,7 +118,7 @@ defmodule IndexedTest do
     end
 
     test "no such index", %{index: index} do
-      assert is_nil(Indexed.paginate(index, "what", limit: 2, order_by: :lol))
+      assert is_nil(Indexed.paginate(index, :what, limit: 2, order_by: :lol))
     end
   end
 

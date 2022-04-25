@@ -1,6 +1,7 @@
 defmodule Indexed.Actions.Warm do
   @moduledoc "Holds internal state info during operations."
-  alias Indexed.{Entity, Helpers, UniquesBundle}
+  import Indexed.Helpers, only: [id: 2]
+  alias Indexed.{Entity, UniquesBundle}
   alias __MODULE__
   require Logger
 
@@ -9,7 +10,7 @@ defmodule Indexed.Actions.Warm do
   @typedoc """
   * `:data_tuple` - full input data set with order/direction hint
   * `:entity_name` - entity name atom (eg. `:cars`)
-  * `:id_key` - Primary key to use in indexes and for accessing the records.
+  * `:id_key` - Specifies how to find the id for a record.
     See `t:Indexed.Entity.t/0`.
   * `:index_ref` - ETS table reference for storing index data
   """
@@ -25,6 +26,12 @@ defmodule Indexed.Actions.Warm do
   already sorted by.
   """
   @type data_tuple :: {sort_dir :: :asc | :desc, sort_field :: atom, [Indexed.record()]}
+
+  @typedoc """
+  Data option for warming the cache. If data_tuple, the given ordering is
+  explicit and we can assume it's correct and skip a sorting routine.
+  """
+  @type data_opt :: data_tuple | Indexed.record() | [Indexed.record()] | nil
 
   @doc """
   For a set of entities, load data and indexes to ETS for each.
@@ -58,7 +65,7 @@ defmodule Indexed.Actions.Warm do
       via `get_uniques_list/4`.
   """
   @spec run(keyword) :: Indexed.t()
-  def run(args) do
+  def run(args \\ []) do
     index_ref = :ets.new(:indexes, Indexed.ets_opts())
 
     entities =
@@ -72,7 +79,7 @@ defmodule Indexed.Actions.Warm do
           data_tuple = resolve_data_opt(opts[:data], entity_name, fields)
 
         # Load the records into ETS, keyed by :id or the :id_key field.
-        Enum.each(full_data, &:ets.insert(ref, {Helpers.id_value(&1, id_key), &1}))
+        Enum.each(full_data, &:ets.insert(ref, {id(&1, id_key), &1}))
 
         warm = %Warm{
           data_tuple: data_tuple,
@@ -226,9 +233,7 @@ defmodule Indexed.Actions.Warm do
   end
 
   @doc "Normalize `warm/1`'s data option."
-  @spec resolve_data_opt({atom, atom, [Indexed.record()]} | [Indexed.record()] | nil, atom, [
-          Entity.field()
-        ]) :: {atom, atom, [Indexed.record()]}
+  @spec resolve_data_opt(data_opt, atom, [Entity.field()]) :: {atom, atom, [Indexed.record()]}
   def resolve_data_opt({dir, name, data}, entity_name, fields)
       when dir in [:asc, :desc] and is_list(data) do
     # If the data hint field isn't even being indexed, raise.
@@ -241,6 +246,8 @@ defmodule Indexed.Actions.Warm do
     do: raise("Bad input data direction for #{entity_name}: #{d}")
 
   def resolve_data_opt(data, _, _) when is_list(data), do: {nil, nil, data}
+
+  def resolve_data_opt(data, _, _), do: {nil, nil, [data]}
 
   @doc """
   Normalize the prefilters option to tuples, adding `nil` prefilter if needed.
@@ -262,6 +269,6 @@ defmodule Indexed.Actions.Warm do
   @doc "Return a list of all ids from the `collection`."
   @spec id_list([Indexed.record()], any) :: [Indexed.id()]
   def id_list(collection, id_key) do
-    Enum.map(collection, &Helpers.id_value(&1, id_key))
+    Enum.map(collection, &id(&1, id_key))
   end
 end

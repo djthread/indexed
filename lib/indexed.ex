@@ -1,8 +1,14 @@
+defimpl Inspect, for: Indexed do
+  def inspect(_state, _opts) do
+    "#Indexed<>"
+  end
+end
+
 defmodule Indexed do
   @moduledoc """
   Tools for creating an index module.
   """
-  alias Indexed.{Entity, UniquesBundle, View}
+  alias Indexed.View
   alias __MODULE__
 
   @ets_opts [read_concurrency: true]
@@ -40,7 +46,7 @@ defmodule Indexed do
   * `:index_ref` - ETS table reference for the indexes.
   """
   @type t :: %Indexed{
-          entities: %{optional(atom) => Entity.t()},
+          entities: %{optional(atom) => Indexed.Entity.t()},
           index_ref: :ets.tid()
         }
 
@@ -65,13 +71,14 @@ defmodule Indexed do
   end
 
   @doc "Get an index data structure."
-  @spec get_index(t, atom, prefilter, order_hint) :: list | map | nil
-  def get_index(index, entity_name, prefilter, order_hint) do
+  @spec get_index(t, atom, prefilter, order_hint | nil) :: list | map | nil
+  def get_index(index, entity_name, prefilter, order_hint) when is_atom(entity_name) do
+    order_hint = order_hint || default_order_hint(index, entity_name)
     get_index(index, index_key(entity_name, prefilter, order_hint))
   end
 
   @doc "Get an index data structure by key."
-  @spec get_index(Indexed.t(), String.t(), any) :: list | map | nil
+  @spec get_index(t, String.t(), any) :: any
   def get_index(index, index_key, default \\ nil) do
     case :ets.lookup(index.index_ref, index_key) do
       [{^index_key, val}] -> val
@@ -93,7 +100,7 @@ defmodule Indexed do
   `field_name` under `entity_name` and vals are occurrence counts. Returns
   `nil` if no data is found.
   """
-  @spec get_uniques_map(t, atom, prefilter, atom) :: UniquesBundle.counts_map() | nil
+  @spec get_uniques_map(t, atom, prefilter, atom) :: Indexed.UniquesBundle.counts_map() | nil
   def get_uniques_map(index, entity_name, prefilter, field_name) do
     get_index(index, uniques_map_key(entity_name, prefilter, field_name))
   end
@@ -104,8 +111,14 @@ defmodule Indexed do
   `prefilter` - 2-element tuple (`t:prefilter/0`) indicating which
   sub-section of the data should be queried. Default is `nil` - no prefilter.
   """
-  @spec get_records(t, atom, prefilter, order_hint) :: [record] | nil
-  def get_records(index, entity_name, prefilter, order_hint) do
+  @spec get_records(t, atom, prefilter, order_hint | nil) :: [record] | nil
+  def get_records(index, entity_name, prefilter, order_hint \\ nil) do
+    k = &Access.key(&1)
+
+    order_hint =
+      order_hint ||
+        index |> get_in([k.(:entities), entity_name, k.(:fields)]) |> hd() |> elem(0)
+
     with records when is_list(records) <- get_index(index, entity_name, prefilter, order_hint) do
       Enum.map(records, &get(index, entity_name, &1))
     end
@@ -159,4 +172,14 @@ defmodule Indexed do
   defp prefilter_id({k, v}), do: "[#{k}=#{v}]"
   defp prefilter_id(fp) when is_binary(fp), do: "<#{fp}>"
   defp prefilter_id(_), do: "[]"
+
+  @doc """
+  Get the name of the first indexed field for an entity.
+  Good order_hint default.
+  """
+  @spec default_order_hint(t, atom) :: atom
+  def default_order_hint(index, entity_name) do
+    k = &Access.key(&1)
+    index |> get_in([k.(:entities), entity_name, k.(:fields)]) |> hd() |> elem(0)
+  end
 end
