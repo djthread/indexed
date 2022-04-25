@@ -37,7 +37,7 @@ defmodule Indexed.View do
   A fingerprint is by taking the relevant parameters which were used to
   construct the prefilter (if applicable) and filter function. This string is
   used to identify the particular view in the map returned by under the key
-  named by `Indexed.view_key/1`.
+  named by `Indexed.views_key/1`.
   """
   @type fingerprint :: String.t()
 

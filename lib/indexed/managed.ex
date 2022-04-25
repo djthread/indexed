@@ -816,7 +816,7 @@ defmodule Indexed.Managed do
     end)
   end
 
-  @doc "Invoke `Indexed.get_view/4` with a wrapped state for convenience."
+  @doc "Invoke `Indexed.get_view/3` with a wrapped state for convenience."
   @spec get_view(state_or_wrapped, atom, View.fingerprint()) :: View.t() | nil
   def get_view(state, name, fingerprint) do
     with_state(state, fn %{index: index} ->

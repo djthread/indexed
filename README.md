@@ -31,7 +31,7 @@ are available with `Indexed.get_uniques_list/4` and
 
 ## Pagination
 
-Calling Indexed.paginate/3` returns a `%Paginator.Page{}` as defined in the
+Calling `Indexed.paginate/3` returns a `%Paginator.Page{}` as defined in the
 cursor-based pagination library,
 [`paginator`](https://github.com/duffelhq/paginator/). The idea is that
 server-side solutions are able to switch between using `paginator` to access
