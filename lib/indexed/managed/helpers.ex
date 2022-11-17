@@ -13,18 +13,35 @@ defmodule Indexed.Managed.Helpers do
   If fun returns a managed state and it was wrapped, rewrap it.
   """
   @spec with_state(M.state_or_wrapped(), (state -> any)) :: any
-  def with_state(%{managed: state} = wrapper, fun) do
+  def with_state(%{managed: state} = sow, fun) do
     with %M.State{} = new_managed <- fun.(state),
-         do: %{wrapper | managed: new_managed}
+         do: %{sow | managed: new_managed}
   end
 
-  def with_state(state, fun), do: fun.(state)
+  def with_state(%{} = sow, fun), do: fun.(sow)
+
+  @doc """
+  Given state, wrapped state, or a module, invoke `fun` with the
+  `t:Indexed.t/0`. If a module is given, use the index from its `__index__/0`.
+  """
+  @spec with_index(M.state_or_module(), (Indexed.t() -> any)) :: any
+  def with_index(%{managed: state} = som, fun),
+    do: %{som | managed: with_index(state, fun)}
+
+  def with_index(%{} = som, fun),
+    do: do_with_index(som.index, som.module, fun)
+
+  def with_index(som, fun),
+    do: do_with_index(som.__index__(), som, fun)
+
+  def do_with_index(index, _mod, fun) when is_function(fun, 1), do: fun.(index)
+  def do_with_index(index, mod, fun), do: fun.(index, mod)
 
   # Returns true if we're holding in cache
   # another record with a has_many including the record for match_id.
   @spec has_referring_many?(state, atom, id) :: boolean
   def has_referring_many?(%{module: mod} = state, match_name, match_id) do
-    Enum.any?(mod.__managed__(), fn name ->
+    Enum.any?(mod.__managed_names__(), fn name ->
       Enum.any?(mod.__managed__(name).children, fn
         {:many, ^match_name, prefilter_key, _} ->
           match_id == Map.fetch!(M.get(state, match_name, match_id), prefilter_key)
@@ -88,17 +105,17 @@ defmodule Indexed.Managed.Helpers do
 
   See `t:preload/0`.
   """
-  @spec preload_fn(assoc_spec, module) :: (map, state -> any) | nil
+  @spec preload_fn(assoc_spec, Ecto.Repo.t()) :: (map, state -> any) | nil
   def preload_fn({:one, name, key}, _repo) do
-    fn record, state ->
-      M.get(state, name, Map.get(record, key))
+    fn record, state_or_module ->
+      M.get(state_or_module, name, Map.get(record, key))
     end
   end
 
   def preload_fn({:many, name, pf_key, order_hint}, _repo) do
-    fn record, state ->
+    fn record, state_or_module ->
       pf = if pf_key, do: {pf_key, record.id}, else: nil
-      M.get_records(state, name, pf, order_hint) || []
+      M.get_records(state_or_module, name, pf, order_hint) || []
     end
   end
 
@@ -109,7 +126,7 @@ defmodule Indexed.Managed.Helpers do
         nil -> raise "Expected association #{key} on #{inspect(module)}."
       end
 
-    fn record, _state ->
+    fn record, _state_or_module ->
       with id when id != nil <- Map.get(record, owner_key),
            do: repo.get(related, id)
     end
@@ -139,4 +156,28 @@ defmodule Indexed.Managed.Helpers do
       __owner__: owner
     }
   end
+
+  @doc """
+  Convert a preload shorthand into a predictable data structure.
+
+  ## Examples
+
+      iex> normalize_preload(:foo)
+      [foo: []]
+      iex> normalize_preload([:foo, bar: :baz])
+      [foo: [], bar: [baz: []]]
+  """
+  @spec normalize_preload(atom | list) :: [tuple]
+  def normalize_preload(preload) do
+    preload
+    |> is_list()
+    |> if(do: preload, else: [preload])
+    |> Enum.map(&do_normalize_preload/1)
+  end
+
+  @spec do_normalize_preload(atom | tuple | list) :: [tuple]
+  defp do_normalize_preload(item) when is_atom(item), do: {item, []}
+  defp do_normalize_preload(item) when is_list(item), do: Enum.map(item, &do_normalize_preload/1)
+  defp do_normalize_preload({item, sub}) when is_atom(sub), do: {item, [{sub, []}]}
+  defp do_normalize_preload({item, sub}) when is_list(sub), do: {item, do_normalize_preload(sub)}
 end

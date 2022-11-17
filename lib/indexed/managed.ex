@@ -52,18 +52,28 @@ defmodule Indexed.Managed do
   For each managed entity, the name (eg. `:cars`) and module (eg. `MyApp.Car`)
   must be specified. If needed, a keyword list of options should follow.
 
-  * `:children` - Keyword list with association fields as keys and
+  - `children` : Keyword list with association fields as keys and
     `t:assoc_spec/0`s as vals. This is used when recursing in `manage/5` as
     well as when resolving. If an undeclared association is resolved,
-    `Repo.get/2` will be used as a fallback.
-  * `:query_fn` - Optional function which takes a queryable and returns a
-    queryable. This allows for extra query logic to be added such as populating
-    virtual fields. Invoked by `manage/5` when the association is needed.
-  * `:id_key` - Specifies how to find the id for a record.  It can be an atom
+    `Repo.get/2` will be used as a fallback. Will automatically include fields
+    given in `manage_path`.
+  - `fields` : List of fields which should be sortable (ascending and
+    descending). See `Indexed.Entity`.
+  - `id_key` : Specifies how to find the id for a record.  It can be an atom
     field name to access, a function, or a tuple in the form `{module,
     function_name}`. In the latter two cases, the record will be passed in.
     Default `:id`.
-  * `:subscribe` and `:unsubscribe` - Functions which take a record's ID and
+  - `manage_path` : Default associations to traverse for `manage/5`.
+    Also, this is the preload argument when `true` is used.
+  - `prefilters` - List of atoms indicating which fields should be
+    prefiltered on. This means that separate indexes will be managed for each
+    unique value for each of these fields, across all records of this entity
+    type. Each two-element tuple has the field name atom and a keyword list
+    of options.
+  - `query_fn` : Optional function which takes a queryable and returns a
+    queryable. This allows for extra query logic to be added such as populating
+    virtual fields. Invoked by `manage/5` when the association is needed.
+  - `:subscribe` and `unsubscribe` : Functions which take a record's ID and
     manage the subscription. These must both be declared or neither.
 
   ## Tips
@@ -94,7 +104,7 @@ defmodule Indexed.Managed do
   # See `t:Indexed.Managed.State.tmp/1`, `add/4`, `rm/4` for details.
 
   import Ecto.Query, except: [preload: 3]
-  import Indexed.Helpers, only: [id: 2, normalize_preload: 1]
+  import Indexed.Helpers, only: [id: 2]
   import Indexed.Managed.Helpers
   alias Indexed.Actions.Warm
   alias Indexed.{Entity, View}
@@ -105,6 +115,7 @@ defmodule Indexed.Managed do
     :children,
     :fields,
     :id_key,
+    :lookups,
     :query,
     :manage_path,
     :module,
@@ -116,26 +127,28 @@ defmodule Indexed.Managed do
   ]
 
   @typedoc """
-  * `:children` - Map with assoc field name keys `t:assoc_spec_opt/0` values.
+  - `children` : Map with assoc field name keys `t:assoc_spec_opt/0` values.
     When this entity is managed, all children will also be managed and so on,
     recursively.
-  * `:fields` - Used to build the index. See `Managed.Entity.t/0`.
-  * `:id_key` - Used to get a record id. See `Managed.Entity.t/0`.
-  * `:query` - Optional function which takes a queryable and returns a
+  - `fields` : Used to build the index. See `Managed.Entity.t/0`.
+  - `id_key` : Used to get a record id. See `Managed.Entity.t/0`.
+  - `lookups` : See `t:Managed.Entity.t/0`.
+  - `query` : Optional function which takes a queryable and returns a
     queryable. This allows for extra query logic to be added such as populating
     virtual fields. Invoked by `manage/5` when the association is needed.
-  * `:manage_path` - Default associations to traverse for `manage/5`.
-  * `:module` - The struct module which will be used for the records.
-  * `:name` - Atom name of the managed entity.
-  * `:prefilters` - Used to build the index. See `Managed.Entity.t/0`.
-  * `:subscribe` - 1-arity function which subscribes to changes by id.
-  * `:tracked` - True if another entity has a :one assoc to this. Internal.
-  * `:unsubscribe` - 1-arity function which unsubscribes to changes by id.
+  - `manage_path` : Default associations to traverse for `manage/5`.
+  - `module` : The struct module which will be used for the records.
+  - `name` : Atom name of the managed entity.
+  - `prefilters` : Used to build the index. See `Managed.Entity.t/0`.
+  - `subscribe` : 1-arity function which subscribes to changes by id.
+  - `tracked` : True if another entity has a :one assoc to this. Internal.
+  - `unsubscribe` : 1-arity function which unsubscribes to changes by id.
   """
   @type t :: %Managed{
           children: children,
           fields: [atom | Entity.field()],
           id_key: id_key,
+          lookups: [Entity.field_name()],
           query: (Ecto.Queryable.t() -> Ecto.Queryable.t()) | nil,
           manage_path: path,
           module: module,
@@ -147,7 +160,10 @@ defmodule Indexed.Managed do
         }
 
   @typedoc "For convenience, state is also accepted within a wrapping map."
-  @type state_or_wrapped :: %{:managed => state | nil, optional(any) => any} | state
+  @type state_or_wrapped :: state | %{:managed => state | nil, optional(any) => any}
+
+  @typedoc "Allows for a table namespace to be given when no more is needed."
+  @type state_or_module :: state_or_wrapped | module
 
   @typedoc "A map of field names to assoc specs."
   @type children :: %{atom => assoc_spec}
@@ -197,24 +213,92 @@ defmodule Indexed.Managed do
   """
   @type parent_info :: :top | {parent_name :: atom, id, path_entry :: atom} | nil
 
-  @typep id_key :: atom | (record -> id)
+  @typedoc """
+  Preload option as passed to functions such as get/4.
+  `true` means to follow the default provided by the entity's `:manage_path`.
+  """
+  @type preloads_option :: preloads | true
+
   @typep add_or_rm :: :add | :rm
-  @typep state :: State.t()
   @typep id :: Indexed.id()
+  @typep id_key :: atom | (record -> id)
+  @typep managed_or_name :: t | atom
   @typep order_hint :: Indexed.order_hint()
   @typep prefilter :: Indexed.prefilter()
+  @typep preloads :: atom | list
   @typep record :: Indexed.record()
   @typep record_or_list :: [record] | record | nil
-  @typep managed_or_name :: t | atom
-  @typep preloads :: atom | list
+  @typep state :: State.t()
 
-  defmacro __using__(repo: repo) do
+  defmacro __using__(opts) do
+    repo = Keyword.fetch!(opts, :repo)
+    ns = opts[:namespace]
+
+    import_line =
+      if ns do
+        # If named tables are used, state isn't needed and shortcut versions
+        # of these functions are added.
+        quote do
+          import unquote(__MODULE__),
+            except: [
+              get: 3,
+              get: 4,
+              get_by: 4,
+              get_by: 5,
+              get_records: 2,
+              get_records: 3,
+              get_records: 4
+            ]
+        end
+      else
+        quote do
+          import unquote(__MODULE__)
+        end
+      end
+
     quote do
-      import unquote(__MODULE__)
+      unquote(import_line)
       alias unquote(__MODULE__)
       @before_compile unquote(__MODULE__)
+      @managed_namespace unquote(ns)
       @managed_repo unquote(repo)
       Module.register_attribute(__MODULE__, :managed_setup, accumulate: true)
+
+      # If a namespace is configured, then ETS named table mode is on.
+      # These functions are excluded from the import above and these shortcut
+      # versions are attached instead, auto-passing the module name.
+      if unquote(ns) do
+        @doc "Get a record by id from a namespaced index. See `Indexed.Managed.get/4`."
+        @spec get(atom, Indexed.id(), Managed.preloads_option()) :: any
+        def get(name, id, preloads \\ nil), do: Managed.get(__MODULE__, name, id, preloads)
+
+        @doc "Get a record from a namespaced index. See `Indexed.Managed.get_by/5`."
+        @spec get_by(atom, atom, any, Managed.preloads_option()) :: [Indexed.record()]
+        def get_by(name, field, value, preloads \\ nil),
+          do: Managed.get_by(__MODULE__, name, field, value, preloads)
+
+        @doc "Get a uniques list. See `Indexed.Managed.get_uniques_list/4`."
+        @spec get_uniques_list(atom, Indexed.prefilter(), atom) :: list | nil
+        def get_uniques_list(name, prefilter \\ nil, field_name),
+          do: Managed.get_uniques_list(__MODULE__, name, prefilter, field_name)
+
+        @doc "Get a list of records. See `Indexed.Managed.get_records/4`."
+        @spec get_records(atom, Indexed.prefilter(), Indexed.order_hint() | nil) ::
+                [Indexed.record()] | nil
+        def get_records(name, prefilter \\ nil, order_hint \\ nil, preload \\ nil),
+          do: Managed.get_records(__MODULE__, name, prefilter, order_hint, preload)
+
+        defoverridable get: 2,
+                       get: 3,
+                       get_by: 3,
+                       get_by: 4,
+                       get_uniques_list: 2,
+                       get_uniques_list: 3,
+                       get_records: 1,
+                       get_records: 2,
+                       get_records: 3,
+                       get_records: 4
+      end
 
       @doc "Create a Managed state struct, without index being initialized."
       @spec init_managed_state :: Managed.State.t()
@@ -223,6 +307,10 @@ defmodule Indexed.Managed do
       @doc "Returns a freshly initialized state for `Indexed.Managed`."
       @spec warm(atom, Managed.data_opt()) :: Managed.State.t()
       def warm(name, data_opt), do: warm(name, data_opt, nil)
+
+      @doc "Get the `Ecto.Repo` module used for this instance of managed."
+      @spec repo :: Ecto.Repo.t()
+      def repo, do: @managed_repo
 
       @doc """
       Invoke this function with (`state, entity_name, data_opt`) or
@@ -241,30 +329,34 @@ defmodule Indexed.Managed do
       @spec warm(Managed.state_or_wrapped(), atom, Managed.data_opt(), Managed.path()) ::
               Managed.state_or_wrapped()
       def warm(state, name, data_opt, path) do
-        fun = &do_warm(&1 || init_managed_state(), name, data_opt, path)
+        opts = [namespace: unquote(ns)]
+        fun = &do_warm(&1 || init_managed_state(), name, data_opt, path, opts)
         Managed.Helpers.with_state(state, fun)
       end
     end
   end
 
   @doc "Loads initial data into index."
-  @spec do_warm(state, atom, data_opt, path) :: state
-  def do_warm(%{module: mod} = state, name, data, path) do
+  @spec do_warm(state, atom, data_opt, path, keyword) :: state
+  def do_warm(%{module: mod} = state, name, data, path, opts) do
+    ns = opts[:namespace]
+
     state =
       if is_nil(state.index) do
-        warm_args =
-          Enum.reduce(mod.__managed__(), [], fn entity, acc ->
-            managed = get_managed(mod, entity)
-
-            Keyword.put(acc, entity,
-              data: [],
-              fields: managed.fields,
-              id_key: managed.id_key,
-              prefilters: managed.prefilters
-            )
+        entities =
+          Keyword.new(mod.__managed__(), fn %{name: entity_name} = managed ->
+            {entity_name,
+             data: [],
+             fields: managed.fields,
+             id_key: managed.id_key,
+             lookups: managed.lookups,
+             prefilters: managed.prefilters,
+             ref: if(ns, do: Indexed.table_name(ns, entity_name))}
           end)
 
-        %{state | index: Indexed.warm(warm_args)}
+        index = Indexed.warm(entities: entities, namespace: ns)
+
+        %{state | index: index}
       else
         state
       end
@@ -284,14 +376,24 @@ defmodule Indexed.Managed do
           path -> normalize_preload(path)
         end
 
+      extra_children =
+        Enum.map(manage_path, fn
+          {field, _} -> field
+          field -> field
+        end)
+
       require unquote(module)
 
+      children = Enum.uniq(unquote(opts[:children] || []) ++ extra_children)
+      fields = Warm.resolve_fields_opt(unquote(opts[:fields] || []), unquote(name))
+
       @managed_setup %Managed{
-        children: unquote(opts[:children] || []),
+        children: children,
         manage_path: manage_path,
-        fields: unquote(opts[:fields] || []),
+        fields: fields,
         query: unquote(opts[:query]),
         id_key: unquote(opts[:id_key] || :id),
+        lookups: unquote(opts[:lookups] || []),
         module: unquote(module),
         name: unquote(name),
         prefilters: unquote(opts[:prefilters] || []),
@@ -302,20 +404,59 @@ defmodule Indexed.Managed do
     end
   end
 
+  @spec manageds_to_entities(Indexed.namespace(), [t]) :: %{atom => Entity.t()}
+  defp manageds_to_entities(ns, manageds) do
+    Map.new(manageds, fn %{name: entity_name} = managed ->
+      {entity_name,
+       %Entity{
+         fields: Warm.resolve_fields_opt(managed.fields, entity_name),
+         id_key: managed.id_key,
+         lookups: managed.lookups,
+         prefilters: managed.prefilters,
+         ref: if(ns, do: Indexed.table_name(ns, entity_name))
+       }}
+    end)
+  end
+
+  # credo:disable-for-next-line
   defmacro __before_compile__(%{module: mod}) do
     attr = &Module.get_attribute(mod, &1)
     Prepare.validate_before_compile!(mod, attr.(:managed_repo), attr.(:managed_setup))
-    Module.put_attribute(mod, :managed, Prepare.rewrite_manageds(attr.(:managed_setup)))
+    manageds = Prepare.rewrite_manageds(attr.(:managed_setup))
+    names = Enum.map(manageds, & &1.name)
+    ns = attr.(:managed_namespace)
+
+    index = %Indexed{
+      entities: manageds_to_entities(ns, manageds),
+      index_ref: if(ns, do: Indexed.table_name(ns))
+    }
+
     Module.delete_attribute(mod, :managed_setup)
+    Module.put_attribute(mod, :managed, manageds)
+    Module.put_attribute(mod, :managed_index, index)
+    Module.put_attribute(mod, :managed_names, names)
 
     quote do
-      @doc "Returns a list of all managed entity names."
-      @spec __managed__ :: [atom]
-      def __managed__, do: Enum.map(@managed, & &1.name)
+      @doc "Returns a list of all managed entities."
+      @spec __managed__ :: [Managed.t()]
+      def __managed__, do: @managed
 
       @doc "Returns the `t:Managed.t/0` for an entity by its name or module."
       @spec __managed__(atom) :: Managed.t() | nil
-      def __managed__(name), do: Enum.find(@managed, &(&1.name == name or &1.module == name))
+      def __managed__(name),
+        do: Enum.find(@managed, &(&1.name == name or &1.module == name))
+
+      @doc "Returns a list of all managed entity names."
+      @spec __managed_names__ :: [atom]
+      def __managed_names__, do: @managed_names
+
+      @doc "Returns the Managed namespace -- an atom to prefix table names."
+      @spec __namespace__ :: atom
+      def __namespace__, do: @managed_namespace
+
+      @doc "Get the pre-computed Indexed struct. (No refs.)"
+      @spec __index__ :: Indexed.t()
+      def __index__, do: @managed_index
 
       @doc "Returns a list of managed entity names which are tracked."
       @spec __tracked__ :: [atom]
@@ -742,14 +883,46 @@ defmodule Indexed.Managed do
 
   If `preloads` is `true`, use the entity's default path.
   """
-  @spec get(state_or_wrapped, atom, id, preloads | true) :: any
-  def get(state, name, id, preloads \\ nil) do
-    with_state(state, fn %{index: index, module: mod} = st ->
-      p = if true == preloads, do: mod.__managed__(name).manage_path, else: preloads
-      record = Indexed.get(index, name, id)
-      if p, do: preload(record, st, p), else: record
+  @spec get(state_or_module, atom, id, preloads_option) :: any
+  def get(som, name, id, preloads \\ nil) do
+    with_index(som, fn index ->
+      index
+      |> Indexed.get(name, id)
+      |> do_preload(som, preloads, name)
     end)
   end
+
+  @spec get_by(state_or_module, atom, atom, any, preloads_option) :: [record]
+  def get_by(som, name, field, value, preloads \\ nil) do
+    with_index(som, fn index ->
+      index
+      |> Indexed.get_by(name, field, value)
+      |> do_preload(som, preloads, name)
+    end)
+  end
+
+  @spec do_preload(record | [record] | nil, state_or_module, preloads_option, atom) ::
+          record | [record] | nil
+  defp do_preload(record_or_list, som, preloads, name) do
+    preloads =
+      if true == preloads,
+        do: module(som).__managed__(name).manage_path,
+        else: preloads
+
+    preload(record_or_list, som, preloads)
+  end
+
+  # Get the managed module from a `t:state_or_module/0`.
+  @spec module(state_or_module) :: module
+  defp module(%{managed: managed}), do: module(managed)
+  defp module(%{module: mod}), do: mod
+  defp module(mod), do: mod
+
+  # Get the Repo module in the given state or for the given module.
+  @spec repo(state_or_module) :: Ecto.Repo.t()
+  defp repo(%{managed: managed}), do: repo(managed)
+  defp repo(%{repo: repo}), do: repo
+  defp repo(son), do: son.repo()
 
   @doc "Invoke `Indexed.put/3` with a wrapped state for convenience."
   @spec put(state_or_wrapped, atom, record) :: :ok
@@ -775,29 +948,38 @@ defmodule Indexed.Managed do
     end)
   end
 
+  @doc "Invoke `Indexed.get_lookup/3` with a wrapped state for convenience."
+  @spec get_lookup(state_or_module, atom, atom) :: Indexed.lookup() | nil
+  def get_lookup(som, name, field_name) do
+    with_index(som, fn index ->
+      Indexed.get_lookup(index, name, field_name)
+    end)
+  end
+
   @doc "Invoke `Indexed.get_records/4` with a wrapped state for convenience."
-  @spec get_records(state_or_wrapped, atom, prefilter | nil, order_hint | nil) ::
-          [record] | nil
-  def get_records(state, name, prefilter \\ nil, order_hint \\ nil) do
-    with_state(state, fn %{index: index} ->
-      Indexed.get_records(index, name, prefilter, order_hint)
+  @spec get_records(state_or_module, atom, prefilter, order_hint | nil, preloads) :: [record]
+  def get_records(som, name, prefilter \\ nil, order_hint \\ nil, preloads \\ nil) do
+    with_index(som, fn index ->
+      index
+      |> Indexed.get_records(name, prefilter, order_hint)
+      |> preload(som, preloads)
+    end)
+  end
+
+  @doc "Invoke `Indexed.get_uniques_list/4`."
+  @spec get_uniques_list(state_or_module, atom, prefilter, atom) :: list | nil
+  def get_uniques_list(som, name, prefilter \\ nil, field_name) do
+    with_index(som, fn index ->
+      Indexed.get_uniques_list(index, name, prefilter, field_name)
     end)
   end
 
   @doc "Invoke `Indexed.get_uniques_map/4`."
   @spec get_uniques_map(state_or_wrapped, atom, prefilter, atom) ::
           Indexed.UniquesBundle.counts_map() | nil
-  def get_uniques_map(state, name, prefilter, field_name) do
+  def get_uniques_map(state, name, prefilter \\ nil, field_name) do
     with_state(state, fn %{index: index} ->
       Indexed.get_uniques_map(index, name, prefilter, field_name)
-    end)
-  end
-
-  @doc "Invoke `Indexed.get_uniques_list/4`."
-  @spec get_uniques_list(state_or_wrapped, atom, prefilter, atom) :: list | nil
-  def get_uniques_list(state, name, prefilter, field_name) do
-    with_state(state, fn %{index: index} ->
-      Indexed.get_uniques_list(index, name, prefilter, field_name)
     end)
   end
 
@@ -809,11 +991,13 @@ defmodule Indexed.Managed do
     end)
   end
 
-  @spec paginate(state_or_wrapped, atom, keyword) :: Paginator.Page.t() | nil
-  def paginate(state, name, params) do
-    with_state(state, fn %{index: index} ->
-      Indexed.paginate(index, name, params)
-    end)
+  if Code.ensure_loaded?(Paginator) do
+    @spec paginate(state_or_wrapped, atom, keyword) :: Paginator.Page.t() | nil
+    def paginate(state, name, params) do
+      with_state(state, fn %{index: index} ->
+        Indexed.paginate(index, name, params)
+      end)
+    end
   end
 
   @doc "Invoke `Indexed.get_view/3` with a wrapped state for convenience."
@@ -835,27 +1019,28 @@ defmodule Indexed.Managed do
   end
 
   @doc "Preload associations recursively."
-  @spec preload(map | [map] | nil, state_or_wrapped, preloads) :: [map] | map | nil
+  @spec preload(map | [map] | nil, state_or_module, preloads) :: [map] | map | nil
   def preload(nil, _, _), do: nil
 
   def preload(record_or_list, %{managed: managed}, preloads) do
     preload(record_or_list, managed, preloads)
   end
 
-  def preload(record_or_list, state, preloads) when is_list(record_or_list) do
-    Enum.map(record_or_list, &preload(&1, state, preloads))
+  def preload(record_or_list, som, preloads) when is_list(record_or_list) do
+    Enum.map(record_or_list, &preload(&1, som, preloads))
   end
 
-  def preload(record_or_list, %{module: mod} = state, preloads) do
+  def preload(record_or_list, som, preloads) do
     record = record_or_list
+    mod = module(som)
 
     preload = fn
       %record_mod{} = record, key ->
         fun =
-          mod.__preload_fn__(record_mod, key, state.repo) ||
+          mod.__preload_fn__(record_mod, key, repo(som)) ||
             raise("No preload for #{inspect(record_mod)}.#{key} under #{inspect(mod)}.")
 
-        fun.(record, state)
+        fun.(record, som)
 
       _key, nil ->
         fn _, _ -> nil end
@@ -869,7 +1054,11 @@ defmodule Indexed.Managed do
 
     Enum.reduce(listify.(preloads), record, fn
       {key, sub_pl}, acc ->
-        preloaded = acc |> preload.(key) |> preload(state, listify.(sub_pl))
+        preloaded =
+          acc
+          |> preload.(key)
+          |> preload(som, listify.(sub_pl))
+
         Map.put(acc, key, preloaded)
 
       key, acc ->

@@ -1,6 +1,6 @@
 defmodule Indexed.Actions.Warm do
   @moduledoc "Holds internal state info during operations."
-  import Indexed.Helpers, only: [id: 2]
+  import Indexed.Helpers, only: [add_to_lookup: 4, id: 2]
   alias Indexed.{Entity, UniquesBundle}
   alias __MODULE__
   require Logger
@@ -12,13 +12,14 @@ defmodule Indexed.Actions.Warm do
   * `:entity_name` - entity name atom (eg. `:cars`)
   * `:id_key` - Specifies how to find the id for a record.
     See `t:Indexed.Entity.t/0`.
-  * `:index_ref` - ETS table reference for storing index data
+  * `:index_ref` - ETS table reference for storing index data or an atom for a
+    named table.
   """
-  @type t :: %__MODULE__{
+  @type t :: %Warm{
           data_tuple: data_tuple,
           entity_name: atom,
           id_key: any,
-          index_ref: :ets.tid()
+          index_ref: atom | :ets.tid()
         }
 
   @typedoc """
@@ -36,8 +37,21 @@ defmodule Indexed.Actions.Warm do
   @doc """
   For a set of entities, load data and indexes to ETS for each.
 
-  Argument is a keyword list where entity name atoms are keys and keyword
-  lists of options are values. Allowed options are as follows:
+  Argument is a keyword list where the top level has:
+
+  * `:entities` - A keyword list, configuring each entity to be stored.
+    One or more of these are expected. Options within listed below.
+  * `:namespace` - Atom to prefix the ETS table names with. If nil (default)
+    then named tables will not be used.
+
+  OR if the `:entities` key is not present, the whole keyword list is presumed
+  to be the option.
+
+  ## Entity Options
+
+  The `:entities` keyword list main option described above has entity name atoms
+  as keys and keyword lists of options are values. Allowed options are as
+  follows:
 
   * `:data` - List of maps (with id key) -- the data to index and cache.
     Required. May take one of the following forms:
@@ -49,6 +63,11 @@ defmodule Indexed.Actions.Warm do
     * Ascending and descending will be indexed for each field.
   * `:id_key` - Primary key to use in indexes and for accessing the records of
     this entity.  See `t:Indexed.Entity.t/0`. Default: `:id`.
+  * `:lookups` - See `t:Indexed.Entity.t/0`.
+  * `:namespace` - Atom name of the ETS table when a named table is
+    desired. Useful for accessing the data in a process without the table ref.
+    When this is non-nil, named tables will be used instead of references and
+    the namespace is used as a prefix for them.
   * `:prefilters` - List of field name atoms which should be prefiltered on.
     This means that separate indexes will be managed for each unique value for
     each of these fields, across all records of this entity type. While field
@@ -66,13 +85,20 @@ defmodule Indexed.Actions.Warm do
   """
   @spec run(keyword) :: Indexed.t()
   def run(args \\ []) do
-    index_ref = :ets.new(:indexes, Indexed.ets_opts())
+    ns = args[:namespace]
+    ets_opts = Indexed.ets_opts(ns)
+    index_ref = :ets.new(Indexed.table_name(ns), ets_opts)
 
     entities =
-      Map.new(args, fn {entity_name, opts} ->
-        ref = :ets.new(entity_name, Indexed.ets_opts())
+      Map.new(args[:entities] || args, fn {entity_name, opts} ->
+        ref =
+          ns
+          |> Indexed.table_name(entity_name)
+          |> :ets.new(ets_opts)
+
         fields = resolve_fields_opt(opts[:fields], entity_name)
         id_key = opts[:id_key] || :id
+        lookups = opts[:lookups] || []
         prefilter_configs = resolve_prefilters_opt(opts[:prefilters])
 
         {_dir, _field, full_data} =
@@ -95,20 +121,36 @@ defmodule Indexed.Actions.Warm do
         # Internally, a `t:prefilter/0` refers to a `{:my_field, "possible
         # value"}` tuple or `nil` which we implicitly include, where no
         # prefilter is applied.
-        for prefilter_config <- prefilter_configs do
-          warm_prefilter(warm, prefilter_config, fields)
-        end
+        for prefilter_config <- prefilter_configs,
+            do: warm_prefilter(warm, prefilter_config, fields)
+
+        # Create lookups: %{"Some Field Value" => [123, 456]}
+        for field_name <- lookups,
+            do: warm_lookups(warm, field_name)
 
         {entity_name,
          %Entity{
            fields: fields,
            id_key: id_key,
+           lookups: lookups,
            prefilters: prefilter_configs,
            ref: ref
          }}
       end)
 
     %Indexed{entities: entities, index_ref: index_ref}
+  end
+
+  # %{"Some Field Value" => [123, 456]}
+  defp warm_lookups(%{data_tuple: {_, _, records}} = warm, field) do
+    lookup =
+      Enum.reduce(records, %{}, fn record, acc ->
+        add_to_lookup(acc, record, field, id(record, warm.id_key))
+      end)
+
+    key = Indexed.lookup_key(warm.entity_name, field)
+
+    :ets.insert(warm.index_ref, {key, lookup})
   end
 
   # If `pf_key` is nil, then we're warming the full set -- no prefilter.
@@ -121,9 +163,9 @@ defmodule Indexed.Actions.Warm do
     %{data_tuple: {d_dir, d_name, full_data}, entity_name: entity_name, index_ref: index_ref} =
       warm
 
-    warm_index = fn prefilter, field, data ->
+    warm_sorted = fn prefilter, field, data ->
       data_tuple = {d_dir, d_name, data}
-      warm_index(warm, prefilter, field, data_tuple)
+      warm_sorted(warm, prefilter, field, data_tuple)
     end
 
     Logger.debug("""
@@ -132,7 +174,7 @@ defmodule Indexed.Actions.Warm do
     """)
 
     if is_nil(pf_key) do
-      Enum.each(fields, &warm_index.(nil, &1, full_data))
+      Enum.each(fields, &warm_sorted.(nil, &1, full_data))
 
       # Store :maintain_unique fields on the nil prefilter. Other prefilters
       # imply a unique index and are handled when they are processed below.
@@ -157,16 +199,16 @@ defmodule Indexed.Actions.Warm do
       # For each value found for the prefilter, create a set of indexes.
       Enum.each(grouped, fn {pf_val, data} ->
         prefilter = {pf_key, pf_val}
-        Enum.each(fields, &warm_index.(prefilter, &1, data))
+        Enum.each(fields, &warm_sorted.(prefilter, &1, data))
         store_all_uniques(index_ref, entity_name, prefilter, pf_opts, data)
       end)
     end
   end
 
   @doc "Create the asc and desc indexes for one field."
-  @spec warm_index(t, Indexed.prefilter(), Entity.field(), data_tuple()) :: true
+  @spec warm_sorted(t, Indexed.prefilter(), Entity.field(), data_tuple()) :: true
   # Data direction hint matches this field -- no need to sort.
-  def warm_index(warm, prefilter, {name, _sort_hint}, {data_dir, name, data}) do
+  def warm_sorted(warm, prefilter, {name, _sort_hint}, {data_dir, name, data}) do
     data_ids = id_list(data, warm.id_key)
 
     asc_key = Indexed.index_key(warm.entity_name, prefilter, name)
@@ -179,7 +221,7 @@ defmodule Indexed.Actions.Warm do
   end
 
   # Data direction hint does NOT match this field -- sorting needed.
-  def warm_index(warm, prefilter, {name, _} = field, {_, _, data}) do
+  def warm_sorted(warm, prefilter, {name, _} = field, {_, _, data}) do
     asc_key = Indexed.index_key(warm.entity_name, prefilter, name)
     desc_key = Indexed.index_key(warm.entity_name, prefilter, {:desc, name})
     asc_ids = data |> Enum.sort(Warm.record_sort_fn(field)) |> id_list(warm.id_key)
@@ -223,8 +265,8 @@ defmodule Indexed.Actions.Warm do
 
   @doc "Normalize fields."
   @spec resolve_fields_opt([atom | Entity.field()], atom) :: [Entity.field()]
-  def resolve_fields_opt(fields, entity_name) do
-    match?([_ | _], fields) || raise "At least one field to index is required on #{entity_name}."
+  def resolve_fields_opt(fields, _entity_name) do
+    # match?([_ | _], fields) || raise "At least one field to index is required on #{entity_name}."
 
     Enum.map(fields, fn
       {_name, _opts} = f -> f

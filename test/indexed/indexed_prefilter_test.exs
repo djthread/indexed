@@ -159,7 +159,7 @@ defmodule IndexedPrefilterTest do
       assert "Phonograph" in list.({:label, "A New Label"})
 
       # Make sure the uniques table for RAM Records is deleted.
-      assert is_nil(list.({:label, "RAM Records"}))
+      assert [] == list.({:label, "RAM Records"})
     end
 
     test "moving a couple ways at once is cool", %{index: index} do
@@ -174,7 +174,7 @@ defmodule IndexedPrefilterTest do
       assert ["CD", "FLAC", "Vinyl", "Yak Bak"] == list.(nil)
 
       # Make sure the uniques table for RAM Records is deleted.
-      assert is_nil(list.({:label, "RAM Records"}))
+      assert [] == list.({:label, "RAM Records"})
     end
   end
 
@@ -249,7 +249,7 @@ defmodule IndexedPrefilterTest do
     assert ["CD", "FLAC", "Phonograph", "Vinyl"] == list.(nil)
 
     # Make sure the uniques table for RAM Records is deleted.
-    assert is_nil(list.({:label, "RAM Records"}))
+    assert [] == list.({:label, "RAM Records"})
   end
 
   describe "drop" do
@@ -267,9 +267,9 @@ defmodule IndexedPrefilterTest do
       Indexed.drop(i, :albums, id1)
       Indexed.drop(i, :albums, id2)
 
-      assert nil == records(i, prefilter)
-      assert nil == map(i, prefilter)
-      assert nil == list(i, prefilter)
+      assert [] == records(i, prefilter)
+      assert [] == list(i, prefilter)
+      assert %{} == map(i, prefilter)
     end
   end
 end
