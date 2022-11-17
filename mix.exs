@@ -56,7 +56,7 @@ defmodule Indexed.MixProject do
       {:ecto_sql, "~> 3.3", optional: true},
       {:excoveralls, "~> 0.14", only: :test},
       {:ex_doc, "~> 0.23", only: :dev, runtime: false},
-      {:paginator, "~> 1.0"},
+      {:paginator, "~> 1.0", optional: true},
       {:phoenix_pubsub, "~> 2.0", optional: true},
       {:postgrex, "~> 0.15", only: [:test]}
     ]
