@@ -21,11 +21,9 @@ defmodule Indexed do
   * `:index_ref` - ETS table reference for the indexes. This will be nil in the
     version compiled into a managed module. If nil, a named table is used.
   """
-  # * `:namespace` - If non-nil, named ETS tables are on and prefixed with this.
   @type t :: %Indexed{
           entities: %{optional(atom) => Indexed.Entity.t()},
-          index_ref: :ets.tid() | nil
-          # namespace: namespace | nil
+          index_ref: :ets.tid() | atom | nil
         }
 
   @typedoc "A record map being cached & indexed. `:id` key is required."
@@ -62,6 +60,9 @@ defmodule Indexed do
   `__index__/0`."
   """
   @type index_or_module :: t | module
+
+  @typedoc "A reference to a table."
+  @type table_ref :: atom | :ets.tid()
 
   defdelegate warm(args), to: Indexed.Actions.Warm, as: :run
   defdelegate put(index, entity_name, record), to: Indexed.Actions.Put, as: :run
@@ -126,11 +127,10 @@ defmodule Indexed do
   Get an ETS table reference or name for an entity name.
   Default with no `entity_name` is indexes table ref.
   """
-  @spec ref(index_or_module, atom) :: atom | :ets.tid()
+  @spec ref(index_or_module, atom) :: table_ref
   def ref(iom, entity_name \\ nil)
-  def ref(%{index_ref: ref, namespace: nil}, nil), do: ref
-  def ref(%{namespace: ns}, nil), do: table_name(ns)
-  def ref(mod, nil), do: table_name(mod.namespace)
+  def ref(%{index_ref: ref}, nil), do: ref
+  def ref(mod, nil), do: table_name(mod.__namespace__())
 
   def ref(%{entities: entities, namespace: nil}, entity_name) do
     %{^entity_name => %{ref: ref}} = entities
@@ -138,7 +138,7 @@ defmodule Indexed do
   end
 
   def ref(%{namespace: ns}, entity_name), do: table_name(ns, entity_name)
-  def ref(mod, entity_name), do: table_name(mod.__namespace__, entity_name)
+  def ref(mod, entity_name), do: table_name(mod.__namespace__(), entity_name)
 
   @doc """
   For the given data set, get a list (sorted ascending) of unique values for

@@ -85,17 +85,15 @@ defmodule Indexed.Actions.Warm do
   @spec run(keyword) :: Indexed.t()
   def run(args \\ []) do
     ns = args[:namespace]
+    indexes = args[:indexes] || []
     ets_opts = Indexed.ets_opts(ns)
     index_ref = :ets.new(Indexed.table_name(ns), ets_opts)
 
     entities =
       Map.new(args[:entities] || args, fn {entity_name, opts} ->
-        opts |> IO.inspect(label: "optsss")
-
         ref =
           ns
           |> Indexed.table_name(entity_name)
-          |> IO.inspect(label: "TABLE NAME WARM")
           |> :ets.new(ets_opts)
 
         fields = resolve_fields_opt(opts[:fields], entity_name)
@@ -106,7 +104,6 @@ defmodule Indexed.Actions.Warm do
           data_tuple = resolve_data_opt(opts[:data], entity_name, fields)
 
         # Load the records into ETS, keyed by :id or the :id_key field.
-        full_data |> IO.inspect(label: "full_data")
         Enum.each(full_data, &:ets.insert(ref, {id(&1, id_key), &1}))
 
         warm = %Warm{
@@ -123,24 +120,24 @@ defmodule Indexed.Actions.Warm do
         # Internally, a `t:prefilter/0` refers to a `{:my_field, "possible
         # value"}` tuple or `nil` which we implicitly include, where no
         # prefilter is applied.
-        for prefilter_config <- prefilter_configs do
-          warm_prefilter(warm, prefilter_config, fields)
-        end
+        for prefilter_config <- prefilter_configs,
+            do: warm_prefilter(warm, prefilter_config, fields)
+
+        # for field_name <- indexes,
+        #   do: warm_index(warm, )
 
         {entity_name,
          %Entity{
            fields: fields,
            id_key: id_key,
+           indexes: indexes,
            prefilters: prefilter_configs,
-           ref: if(is_reference(ref), do: ref)
+           ref: ref
          }}
       end)
 
-    %Indexed{
-      entities: entities,
-      index_ref: if(is_reference(index_ref), do: index_ref)
-    }
-    |> IO.inspect(label: "SHITT", structs: false)
+    %Indexed{entities: entities, index_ref: index_ref}
+    |> IO.inspect(label: "WARMED", structs: false)
   end
 
   # If `pf_key` is nil, then we're warming the full set -- no prefilter.

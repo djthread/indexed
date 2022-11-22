@@ -207,6 +207,13 @@ defmodule Indexed.ManagedNamedTableTest do
            ] = entries()
   end
 
+  test "indexes" do
+    basic_setup()
+
+    Indexed.Managed.get_by(BlogServerNT, :users, :name, "bob")
+    |> IO.inspect(label: "GOT BOB!")
+  end
+
   test "Nesty McNesterson" do
     {:ok, %{id: bob_id} = bob} = BlogNT.create_user("bob", ["pin"])
     {:ok, %{id: lucy_id} = lucy} = BlogNT.create_user("lucy")

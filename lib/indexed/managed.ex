@@ -105,6 +105,7 @@ defmodule Indexed.Managed do
     :children,
     :fields,
     :id_key,
+    :indexes,
     :query,
     :manage_path,
     :module,
@@ -121,6 +122,7 @@ defmodule Indexed.Managed do
     recursively.
   * `:fields` - Used to build the index. See `Managed.Entity.t/0`.
   * `:id_key` - Used to get a record id. See `Managed.Entity.t/0`.
+  * `:indexes` - See `t:Managed.Entity.t/0`.
   * `:query` - Optional function which takes a queryable and returns a
     queryable. This allows for extra query logic to be added such as populating
     virtual fields. Invoked by `manage/5` when the association is needed.
@@ -136,6 +138,7 @@ defmodule Indexed.Managed do
           children: children,
           fields: [atom | Entity.field()],
           id_key: id_key,
+          indexes: [Entity.field_name()],
           query: (Ecto.Queryable.t() -> Ecto.Queryable.t()) | nil,
           manage_path: path,
           module: module,
@@ -266,7 +269,7 @@ defmodule Indexed.Managed do
 
     state =
       if is_nil(state.index) do
-        entities = manageds_to_entities(mod.__managed__())
+        entities = manageds_to_entities(ns, mod.__managed__())
 
         index =
           Indexed.warm(entities: entities, namespace: ns)
@@ -301,6 +304,7 @@ defmodule Indexed.Managed do
         fields: unquote(opts[:fields] || []),
         query: unquote(opts[:query]),
         id_key: unquote(opts[:id_key] || :id),
+        indexes: unquote(opts[:indexes] || []),
         module: unquote(module),
         name: unquote(name),
         prefilters: unquote(opts[:prefilters] || []),
@@ -311,14 +315,16 @@ defmodule Indexed.Managed do
     end
   end
 
-  @spec manageds_to_entities([t]) :: [Entity.t()]
-  defp manageds_to_entities(manageds) do
+  @spec manageds_to_entities(Indexed.namespace(), [t]) :: [Entity.t()]
+  defp manageds_to_entities(ns, manageds) do
     Enum.reduce(manageds, [], fn %{name: entity_name} = managed, acc ->
       Keyword.put(acc, entity_name,
         data: [],
         fields: managed.fields,
         id_key: managed.id_key,
-        prefilters: managed.prefilters
+        indexes: managed.indexes,
+        prefilters: managed.prefilters,
+        ref: if(ns, do: Indexed.table_name(ns, entity_name))
       )
     end)
   end
@@ -327,8 +333,13 @@ defmodule Indexed.Managed do
     attr = &Module.get_attribute(mod, &1)
     Prepare.validate_before_compile!(mod, attr.(:managed_repo), attr.(:managed_setup))
     manageds = Prepare.rewrite_manageds(attr.(:managed_setup))
-    index = %Indexed{entities: manageds_to_entities(manageds)}
     names = Enum.map(manageds, & &1.name)
+    ns = attr.(:managed_namespace)
+
+    index = %Indexed{
+      entities: manageds_to_entities(ns, manageds),
+      index_ref: if(ns, do: Indexed.table_name(ns))
+    }
 
     Module.delete_attribute(mod, :managed_setup)
     Module.put_attribute(mod, :managed, manageds)
@@ -342,7 +353,8 @@ defmodule Indexed.Managed do
 
       @doc "Returns the `t:Managed.t/0` for an entity by its name or module."
       @spec __managed__(atom) :: Managed.t() | nil
-      def __managed__(name), do: Enum.find(@managed, &(&1.name == name or &1.module == name))
+      def __managed__(name),
+        do: Enum.find(@managed, &(&1.name == name or &1.module == name))
 
       @doc "Returns a list of all managed entity names."
       @spec __managed_names__ :: [atom]
