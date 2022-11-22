@@ -18,13 +18,14 @@ defmodule Indexed.Entity do
       fetched via `Indexed.get_uniques_list/4` and
       `Indexed.get_uniques_map/4`.
   * `:ref` - ETS table reference where records of this entity type are
-    stored, keyed by id.
+    stored, keyed by id. This will be nil in the version compiled into a managed
+    module.
   """
   @type t :: %__MODULE__{
           fields: [field],
           id_key: any,
           prefilters: [prefilter_config],
-          ref: :ets.tid()
+          ref: :ets.tid() | nil
         }
 
   @typedoc """

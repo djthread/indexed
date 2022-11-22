@@ -13,18 +13,27 @@ defmodule Indexed.Managed.Helpers do
   If fun returns a managed state and it was wrapped, rewrap it.
   """
   @spec with_state(M.state_or_wrapped(), (state -> any)) :: any
-  def with_state(%{managed: state} = wrapper, fun) do
+  def with_state(%{managed: state} = sow, fun) do
     with %M.State{} = new_managed <- fun.(state),
-         do: %{wrapper | managed: new_managed}
+         do: %{sow | managed: new_managed}
   end
 
-  def with_state(state, fun), do: fun.(state)
+  def with_state(%{} = sow, fun), do: fun.(sow)
+
+  @spec with_index(M.state_or_module(), (Indexed.t() -> any)) :: any
+  def with_index(%{managed: state} = som, fun) do
+    with %M.State{} = new_managed <- fun.(state.index),
+         do: %{som | managed: new_managed}
+  end
+
+  def with_index(%{} = som, fun), do: fun.(som)
+  def with_index(som, fun), do: fun.(som.__index__())
 
   # Returns true if we're holding in cache
   # another record with a has_many including the record for match_id.
   @spec has_referring_many?(state, atom, id) :: boolean
   def has_referring_many?(%{module: mod} = state, match_name, match_id) do
-    Enum.any?(mod.__managed__(), fn name ->
+    Enum.any?(mod.__managed_names__(), fn name ->
       Enum.any?(mod.__managed__(name).children, fn
         {:many, ^match_name, prefilter_key, _} ->
           match_id == Map.fetch!(M.get(state, match_name, match_id), prefilter_key)
@@ -88,17 +97,17 @@ defmodule Indexed.Managed.Helpers do
 
   See `t:preload/0`.
   """
-  @spec preload_fn(assoc_spec, module) :: (map, state -> any) | nil
+  @spec preload_fn(assoc_spec, Ecto.Repo.t()) :: (map, state -> any) | nil
   def preload_fn({:one, name, key}, _repo) do
-    fn record, state ->
-      M.get(state, name, Map.get(record, key))
+    fn record, state_or_module ->
+      M.get(state_or_module, name, Map.get(record, key))
     end
   end
 
   def preload_fn({:many, name, pf_key, order_hint}, _repo) do
-    fn record, state ->
+    fn record, state_or_module ->
       pf = if pf_key, do: {pf_key, record.id}, else: nil
-      M.get_records(state, name, pf, order_hint) || []
+      M.get_records(state_or_module, name, pf, order_hint) || []
     end
   end
 
@@ -109,7 +118,7 @@ defmodule Indexed.Managed.Helpers do
         nil -> raise "Expected association #{key} on #{inspect(module)}."
       end
 
-    fn record, _state ->
+    fn record, _state_or_module ->
       with id when id != nil <- Map.get(record, owner_key),
            do: repo.get(related, id)
     end

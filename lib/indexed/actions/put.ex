@@ -53,7 +53,7 @@ defmodule Indexed.Actions.Put do
     %{fields: fields} = entity = Map.fetch!(index.entities, name)
 
     # Update the record itself (by id).
-    :ets.insert(entity.ref, {id, put.record})
+    :ets.insert(entity.ref |> IO.inspect(label: "entityref"), {id, put.record})
 
     # Update indexes and uniques for each prefilter.
     Enum.each(entity.prefilters, fn

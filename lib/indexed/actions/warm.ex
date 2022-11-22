@@ -12,13 +12,14 @@ defmodule Indexed.Actions.Warm do
   * `:entity_name` - entity name atom (eg. `:cars`)
   * `:id_key` - Specifies how to find the id for a record.
     See `t:Indexed.Entity.t/0`.
-  * `:index_ref` - ETS table reference for storing index data
+  * `:index_ref` - ETS table reference for storing index data or an atom for a
+    named table.
   """
-  @type t :: %__MODULE__{
+  @type t :: %Warm{
           data_tuple: data_tuple,
           entity_name: atom,
           id_key: any,
-          index_ref: :ets.tid()
+          index_ref: atom | :ets.tid()
         }
 
   @typedoc """
@@ -36,8 +37,21 @@ defmodule Indexed.Actions.Warm do
   @doc """
   For a set of entities, load data and indexes to ETS for each.
 
-  Argument is a keyword list where entity name atoms are keys and keyword
-  lists of options are values. Allowed options are as follows:
+  Argument is a keyword list where the top level has:
+
+  * `:entities` - A keyword list, configuring each entity to be stored.
+    One or more of these are expected. Options within listed below.
+  * `:namespace` - Atom to prefix the ETS table names with. If nil (default)
+    then named tables will not be used.
+
+  OR if the `:entities` key is not present, the whole keyword list is presumed
+  to be the option.
+
+  ## Entity Options
+
+  The `:entities` keyword list main option described above has entity name atoms
+  as keys and keyword lists of options are values. Allowed options are as
+  follows:
 
   * `:data` - List of maps (with id key) -- the data to index and cache.
     Required. May take one of the following forms:
@@ -49,6 +63,10 @@ defmodule Indexed.Actions.Warm do
     * Ascending and descending will be indexed for each field.
   * `:id_key` - Primary key to use in indexes and for accessing the records of
     this entity.  See `t:Indexed.Entity.t/0`. Default: `:id`.
+  * `:namespace` - Atom name of the ETS table when a named table is
+    desired. Useful for accessing the data in a process without the table ref.
+    When this is non-nil, named tables will be used instead of references and
+    the namespace is used as a prefix for them.
   * `:prefilters` - List of field name atoms which should be prefiltered on.
     This means that separate indexes will be managed for each unique value for
     each of these fields, across all records of this entity type. While field
@@ -66,11 +84,20 @@ defmodule Indexed.Actions.Warm do
   """
   @spec run(keyword) :: Indexed.t()
   def run(args \\ []) do
-    index_ref = :ets.new(:indexes, Indexed.ets_opts())
+    ns = args[:namespace]
+    ets_opts = Indexed.ets_opts(ns)
+    index_ref = :ets.new(Indexed.table_name(ns), ets_opts)
 
     entities =
-      Map.new(args, fn {entity_name, opts} ->
-        ref = :ets.new(entity_name, Indexed.ets_opts())
+      Map.new(args[:entities] || args, fn {entity_name, opts} ->
+        opts |> IO.inspect(label: "optsss")
+
+        ref =
+          ns
+          |> Indexed.table_name(entity_name)
+          |> IO.inspect(label: "TABLE NAME WARM")
+          |> :ets.new(ets_opts)
+
         fields = resolve_fields_opt(opts[:fields], entity_name)
         id_key = opts[:id_key] || :id
         prefilter_configs = resolve_prefilters_opt(opts[:prefilters])
@@ -79,6 +106,7 @@ defmodule Indexed.Actions.Warm do
           data_tuple = resolve_data_opt(opts[:data], entity_name, fields)
 
         # Load the records into ETS, keyed by :id or the :id_key field.
+        full_data |> IO.inspect(label: "full_data")
         Enum.each(full_data, &:ets.insert(ref, {id(&1, id_key), &1}))
 
         warm = %Warm{
@@ -104,11 +132,15 @@ defmodule Indexed.Actions.Warm do
            fields: fields,
            id_key: id_key,
            prefilters: prefilter_configs,
-           ref: ref
+           ref: if(is_reference(ref), do: ref)
          }}
       end)
 
-    %Indexed{entities: entities, index_ref: index_ref}
+    %Indexed{
+      entities: entities,
+      index_ref: if(is_reference(index_ref), do: index_ref)
+    }
+    |> IO.inspect(label: "SHITT", structs: false)
   end
 
   # If `pf_key` is nil, then we're warming the full set -- no prefilter.

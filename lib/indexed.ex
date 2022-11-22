@@ -11,13 +11,31 @@ defmodule Indexed do
   alias Indexed.View
   alias __MODULE__
 
+  # Baseline opts. Others such as :named_table may be added.
   @ets_opts [read_concurrency: true]
+
+  defstruct entities: %{}, index_ref: nil
+
+  @typedoc """
+  * `:entities` - Map of entity name keys to `t:Indexed.Entity.t/0`
+  * `:index_ref` - ETS table reference for the indexes. This will be nil in the
+    version compiled into a managed module. If nil, a named table is used.
+  """
+  # * `:namespace` - If non-nil, named ETS tables are on and prefixed with this.
+  @type t :: %Indexed{
+          entities: %{optional(atom) => Indexed.Entity.t()},
+          index_ref: :ets.tid() | nil
+          # namespace: namespace | nil
+        }
 
   @typedoc "A record map being cached & indexed. `:id` key is required."
   @type record :: map
 
   @typedoc "The value of a record's `:id` field - usually a UUID or integer."
   @type id :: any
+
+  @typedoc "A value to prefix ETS table names."
+  @type namespace :: atom
 
   @typedoc """
   Specifies a discrete data set of an entity, pre-partitioned into a group.
@@ -39,36 +57,52 @@ defmodule Indexed do
   @type order_hint ::
           atom | {direction :: :asc | :desc, field_name :: atom} | [{:asc | :desc, atom}]
 
-  defstruct entities: %{}, index_ref: nil
-
   @typedoc """
-  * `:entities` - Map of entity name keys to `t:Indexed.Entity.t/0`
-  * `:index_ref` - ETS table reference for the indexes.
+  Either an indexed struct or a module where we could get the struct by calling
+  `__index__/0`."
   """
-  @type t :: %Indexed{
-          entities: %{optional(atom) => Indexed.Entity.t()},
-          index_ref: :ets.tid()
-        }
+  @type index_or_module :: t | module
 
   defdelegate warm(args), to: Indexed.Actions.Warm, as: :run
   defdelegate put(index, entity_name, record), to: Indexed.Actions.Put, as: :run
   defdelegate drop(index, entity_name, id), to: Indexed.Actions.Drop, as: :run
   defdelegate create_view(index, entity_name, fp, opts), to: Indexed.Actions.CreateView, as: :run
   defdelegate destroy_view(index, entity_name, fp), to: Indexed.Actions.DestroyView, as: :run
-  defdelegate paginate(index, entity_name, params), to: Indexed.Actions.Paginate, as: :run
+
+  if Code.ensure_loaded?(Paginator) do
+    defdelegate paginate(index, entity_name, params), to: Indexed.Actions.Paginate, as: :run
+  end
 
   @doc "Get the ETS options to be used for any and all tables."
-  @spec ets_opts :: keyword
-  def ets_opts, do: @ets_opts
+  @spec ets_opts(namespace | nil) :: keyword
+  def ets_opts(nil), do: @ets_opts
+  def ets_opts(_), do: [:named_table | @ets_opts]
 
   @doc "Get an entity by id from the index."
-  @spec get(t, atom, id, any) :: any
-  def get(index, entity_name, id, default \\ nil) do
-    case :ets.lookup(Map.fetch!(index.entities, entity_name).ref, id) do
+  @spec get(index_or_namespace :: t | atom, atom, id, any) :: any
+  def get(index_or_ns, entity_name, id, default \\ nil)
+
+  def get(%{} = index_or_ns, entity_name, id, default) do
+    case :ets.lookup(Map.fetch!(index_or_ns.entities, entity_name).ref, id) do
       [{^id, val}] -> val
       [] -> default
     end
   end
+
+  def get(index_or_ns, entity_name, id, default) do
+    case :ets.lookup(table_name(index_or_ns, entity_name), id) do
+      [{^id, val}] -> val
+      [] -> default
+    end
+  end
+
+  @doc "Build an ETS table name from its namespace and entity_name."
+  @spec table_name(namespace | nil, atom) :: atom
+  def table_name(namespace \\ nil, entity_name \\ nil)
+  def table_name(nil, nil), do: :indexed
+  def table_name(nil, entity_name), do: entity_name
+  def table_name(namespace, nil), do: :"#{namespace}"
+  def table_name(namespace, entity_name), do: :"#{namespace}:#{entity_name}"
 
   @doc "Get an index data structure."
   @spec get_index(t, atom, prefilter, order_hint | nil) :: list | map | nil
@@ -78,13 +112,33 @@ defmodule Indexed do
   end
 
   @doc "Get an index data structure by key."
-  @spec get_index(t, String.t(), any) :: any
-  def get_index(index, index_key, default \\ nil) do
-    case :ets.lookup(index.index_ref, index_key) do
+  @spec get_index(index_or_module, String.t(), any) :: any
+  def get_index(iom, index_key, default \\ nil) do
+    {iom, ref(iom), index_key} |> IO.inspect(label: "get_index")
+
+    case :ets.lookup(ref(iom), index_key) do
       [{^index_key, val}] -> val
       [] -> default
     end
   end
+
+  @doc """
+  Get an ETS table reference or name for an entity name.
+  Default with no `entity_name` is indexes table ref.
+  """
+  @spec ref(index_or_module, atom) :: atom | :ets.tid()
+  def ref(iom, entity_name \\ nil)
+  def ref(%{index_ref: ref, namespace: nil}, nil), do: ref
+  def ref(%{namespace: ns}, nil), do: table_name(ns)
+  def ref(mod, nil), do: table_name(mod.namespace)
+
+  def ref(%{entities: entities, namespace: nil}, entity_name) do
+    %{^entity_name => %{ref: ref}} = entities
+    ref
+  end
+
+  def ref(%{namespace: ns}, entity_name), do: table_name(ns, entity_name)
+  def ref(mod, entity_name), do: table_name(mod.__namespace__, entity_name)
 
   @doc """
   For the given data set, get a list (sorted ascending) of unique values for
