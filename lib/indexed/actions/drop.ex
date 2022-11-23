@@ -6,7 +6,7 @@ defmodule Indexed.Actions.Drop do
   - For each prefilter, drop record from uniques.
   - Drop record itself from id-keyed lookup table.
   """
-  import Indexed.Helpers, only: [id: 1]
+  import Indexed.Helpers, only: [id: 1, rm_from_lookup: 4]
   alias Indexed.{Entity, UniquesBundle, View}
   alias __MODULE__
 
@@ -31,22 +31,28 @@ defmodule Indexed.Actions.Drop do
   Add or update a record, along with the indexes to reflect the change.
   """
   @spec run(Indexed.t(), atom, id) :: :ok | :error
-  def run(index, entity_name, record_id) do
-    case Indexed.get(index, entity_name, record_id) do
+  def run(%{index_ref: index_ref} = index, name, record_id) do
+    case Indexed.get(index, name, record_id) do
       nil ->
         :error
 
       record ->
-        %{fields: fields} = entity = Map.fetch!(index.entities, entity_name)
-        drop = %Drop{entity_name: entity_name, index: index, record: record}
+        %{
+          fields: fields,
+          lookups: lookups,
+          prefilters: prefilters,
+          ref: ref
+        } = Map.fetch!(index.entities, name)
 
-        Enum.each(entity.prefilters, fn
+        drop = %Drop{entity_name: name, index: index, record: record}
+
+        Enum.each(prefilters, fn
           {nil, pf_opts} ->
             drop_from_index_for_fields(drop, nil, fields)
             drop_from_all_uniques(drop, pf_opts[:maintain_unique] || [], nil)
 
           {pf_key, pf_opts} ->
-            {_, list, _, _} = bundle = UniquesBundle.get(index, entity_name, nil, pf_key)
+            {_, list, _, _} = bundle = UniquesBundle.get(index, name, nil, pf_key)
 
             handle_prefilter_value = fn value ->
               prefilter = {pf_key, value}
@@ -64,14 +70,22 @@ defmodule Indexed.Actions.Drop do
         end)
 
         # Update the data for each view.
-        with views when is_map(views) <- Indexed.get_views(index, entity_name) do
+        with %{} = views <- Indexed.get_views(index, name) do
           Enum.each(views, fn {fp, view} ->
             update_view_data(%{drop | current_view: view}, fp)
           end)
         end
 
+        # Delete the record from each lookup.
+        for field <- lookups do
+          key = Indexed.lookup_key(name, field)
+          map = Indexed.get_index(index, key)
+          map = rm_from_lookup(map, record, field, record_id)
+          :ets.insert(index_ref, {key, map})
+        end
+
         # Delete the record itself.
-        :ets.delete(entity.ref, record_id)
+        :ets.delete(ref, record_id)
 
         :ok
     end

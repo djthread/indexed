@@ -1,6 +1,6 @@
 defmodule Indexed.Entity do
   @moduledoc "Configuration for a type of thing to be indexed."
-  defstruct fields: [], id_key: :id, indexes: [], prefilters: [], ref: nil
+  defstruct fields: [], id_key: :id, lookups: [], prefilters: [], ref: nil
 
   @typedoc """
   * `:fields` - List of `t:field/0`s to be indexed for this entity.
@@ -8,8 +8,8 @@ defmodule Indexed.Entity do
     field name to access, a function, or a tuple in the form `{module,
     function_name}`. In the latter two cases, the record will be passed in.
     Default `:id`.
-  * `:indexes` - List of entity field names which should be indexed.
-    These fields will be usable with `Indexed.get_by/4`.
+  * `:lookups` - List of entity field names which should be indexed.
+    These fields can be leveraged via `Indexed.get_by/4`.
   * `:prefilters` - List of tuples indicating which fields should be
     prefiltered on. This means that separate indexes will be managed for each
     unique value for each of these fields, across all records of this entity
@@ -26,7 +26,7 @@ defmodule Indexed.Entity do
   @type t :: %__MODULE__{
           fields: [field],
           id_key: any,
-          indexes: [field_name],
+          lookups: [field_name],
           prefilters: [prefilter_config],
           ref: :ets.tid() | atom | nil
         }

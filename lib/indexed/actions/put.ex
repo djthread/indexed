@@ -1,6 +1,6 @@
 defmodule Indexed.Actions.Put do
   @moduledoc "An index action where a record is being added or updated."
-  import Indexed.Helpers, only: [id: 1]
+  import Indexed.Helpers, only: [add_to_lookup: 4, id: 1]
   alias Indexed.{Entity, UniquesBundle, View}
   alias __MODULE__
   require Logger
@@ -50,13 +50,14 @@ defmodule Indexed.Actions.Put do
   defp do_run(%{entity_name: name, index: index} = put, id) do
     Logger.debug("Putting into #{put.entity_name}: id #{id}")
 
-    %{fields: fields} = entity = Map.fetch!(index.entities, name)
+    %{fields: fields, lookups: lookups, prefilters: prefilters, ref: ref} =
+      Map.fetch!(index.entities, name)
 
     # Update the record itself (by id).
-    :ets.insert(entity.ref |> IO.inspect(label: "entityref"), {id, put.record})
+    :ets.insert(ref, {id, put.record})
 
     # Update indexes and uniques for each prefilter.
-    Enum.each(entity.prefilters, fn
+    Enum.each(prefilters, fn
       {nil, pf_opts} ->
         update_index_for_fields(put, nil, fields, false)
         update_all_uniques(put, pf_opts[:maintain_unique] || [], nil, false)
@@ -95,10 +96,18 @@ defmodule Indexed.Actions.Put do
     end)
 
     # Update the data for each view.
-    with views when is_map(views) <- Indexed.get_views(index, name) do
+    with %{} = views <- Indexed.get_views(index, name) do
       Enum.each(views, fn {fp, view} ->
         update_view_data(%{put | current_view: view}, fp)
       end)
+    end
+
+    # Add the record to each lookup.
+    for field <- lookups do
+      key = Indexed.lookup_key(name, field)
+      map = Indexed.get_index(index, key)
+      map = add_to_lookup(map, put.record, field, id)
+      :ets.insert(index.index_ref, {key, map})
     end
 
     :ok

@@ -55,4 +55,17 @@ defmodule Indexed.Helpers do
   defp do_normalize_preload(item) when is_list(item), do: Enum.map(item, &do_normalize_preload/1)
   defp do_normalize_preload({item, sub}) when is_atom(sub), do: {item, [{sub, []}]}
   defp do_normalize_preload({item, sub}) when is_list(sub), do: {item, do_normalize_preload(sub)}
+
+  @doc "Given a lookup map, add `field` according to `record`."
+  @spec add_to_lookup(Indexed.lookup(), Indexed.record(), atom, Indexed.id()) :: Indexed.lookup()
+  def add_to_lookup(lookup, record, field, id) do
+    val = Map.fetch!(record, field)
+    Map.update(lookup, val, [id], &[id | &1])
+  end
+
+  @doc "Given a lookup map, remove `field` according to `record`."
+  def rm_from_lookup(lookup, record, field, id) do
+    val = Map.fetch!(record, field)
+    Map.update!(lookup, val, &(&1 -- [id]))
+  end
 end

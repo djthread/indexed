@@ -28,7 +28,7 @@ defmodule BlogServerNT do
   managed :users, User,
     children: [:best_friend, :flare_pieces],
     prefilters: [:name],
-    indexes: [:name],
+    lookups: [:name],
     subscribe: &Blog.subscribe_to_user/1,
     unsubscribe: &Blog.unsubscribe_from_user/1
 
@@ -38,7 +38,7 @@ defmodule BlogServerNT do
   # When `:this_blog` is false, don't keep them in the cache.
   managed :replies, Reply, children: [:comment]
 
-  def get_comment(id), do: get(:blog, :comments, id)
+  def get_comment(id), do: get(:comments, id)
 
   def call(msg), do: GenServer.call(__MODULE__, msg)
   def run(fun), do: call({:run, fun})
@@ -76,7 +76,7 @@ defmodule BlogServerNT do
   end
 
   def handle_call({:create_comment, author_id, post_id, content}, _from, state) do
-    %{} = get(state, :posts, post_id)
+    %{} = get(:posts, post_id)
 
     %Comment{}
     |> Comment.changeset(%{post_id: post_id, author_id: author_id, content: content})
@@ -88,12 +88,12 @@ defmodule BlogServerNT do
   end
 
   def handle_call({:update_post, post_id, params}, _from, state) do
-    with %{} = post <- get(state, :posts, post_id, true),
+    with %{} = post <- get(:posts, post_id, true),
          %{valid?: true} = cs <- Post.changeset(post, params),
          {:ok, _} <- Repo.update(cs) do
       new_post = Blog.get_post(post.id)
       state = manage(state, :posts, post, new_post)
-      {:reply, {:ok, get(state, :posts, post_id, true)}, state}
+      {:reply, {:ok, get(:posts, post_id, true)}, state}
     else
       {:error, _cs} = err -> {:reply, err, state}
       _ -> {:reply, :error, state}
@@ -101,7 +101,7 @@ defmodule BlogServerNT do
   end
 
   def handle_call({:update_comment, comment_id, content}, _from, state) do
-    with %{} = comment <- get(state, :comments, comment_id),
+    with %{} = comment <- get(:comments, comment_id),
          %{valid?: true} = cs <- Comment.changeset(comment, %{content: content}),
          {:ok, new_comment} = ok <- Repo.update(cs) do
       {:reply, ok, manage(state, :comments, comment, new_comment)}
@@ -112,14 +112,14 @@ defmodule BlogServerNT do
   end
 
   def handle_call({:forget_post, post_id}, _from, state) do
-    case get(state, :posts, post_id) do
+    case get(:posts, post_id) do
       nil -> {:reply, :error, state}
       post -> {:reply, :ok, manage(state, :posts, :delete, post)}
     end
   end
 
   def handle_call({:delete_comment, comment_id}, _from, state) do
-    case get(state, :comments, comment_id) do
+    case get(:comments, comment_id) do
       nil ->
         {:reply, :error, state}
 
@@ -135,8 +135,8 @@ defmodule BlogServerNT do
 
   def handle_call({:run, fun}, _from, state) do
     tools = %{
-      get: &(state |> get(&1, &2) |> preload(state, &3)),
-      get_records: &get_records(state, &1, nil),
+      get: &(&1 |> get(&2) |> preload(state, &3)),
+      get_records: &get_records(&1, nil),
       preload: &preload(&1, state, &2)
     }
 

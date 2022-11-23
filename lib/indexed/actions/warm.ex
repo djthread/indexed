@@ -1,6 +1,6 @@
 defmodule Indexed.Actions.Warm do
   @moduledoc "Holds internal state info during operations."
-  import Indexed.Helpers, only: [id: 2]
+  import Indexed.Helpers, only: [add_to_lookup: 4, id: 2]
   alias Indexed.{Entity, UniquesBundle}
   alias __MODULE__
   require Logger
@@ -63,6 +63,7 @@ defmodule Indexed.Actions.Warm do
     * Ascending and descending will be indexed for each field.
   * `:id_key` - Primary key to use in indexes and for accessing the records of
     this entity.  See `t:Indexed.Entity.t/0`. Default: `:id`.
+  * `:lookups` - See `Indexed.Entity.t/0`.
   * `:namespace` - Atom name of the ETS table when a named table is
     desired. Useful for accessing the data in a process without the table ref.
     When this is non-nil, named tables will be used instead of references and
@@ -85,7 +86,6 @@ defmodule Indexed.Actions.Warm do
   @spec run(keyword) :: Indexed.t()
   def run(args \\ []) do
     ns = args[:namespace]
-    indexes = args[:indexes] || []
     ets_opts = Indexed.ets_opts(ns)
     index_ref = :ets.new(Indexed.table_name(ns), ets_opts)
 
@@ -98,6 +98,7 @@ defmodule Indexed.Actions.Warm do
 
         fields = resolve_fields_opt(opts[:fields], entity_name)
         id_key = opts[:id_key] || :id
+        lookups = opts[:lookups] || []
         prefilter_configs = resolve_prefilters_opt(opts[:prefilters])
 
         {_dir, _field, full_data} =
@@ -123,21 +124,33 @@ defmodule Indexed.Actions.Warm do
         for prefilter_config <- prefilter_configs,
             do: warm_prefilter(warm, prefilter_config, fields)
 
-        # for field_name <- indexes,
-        #   do: warm_index(warm, )
+        # Create lookups: %{"Some Field Value" => [123, 456]}
+        for field_name <- lookups,
+            do: warm_index(warm, field_name)
 
         {entity_name,
          %Entity{
            fields: fields,
            id_key: id_key,
-           indexes: indexes,
+           lookups: lookups,
            prefilters: prefilter_configs,
            ref: ref
          }}
       end)
 
     %Indexed{entities: entities, index_ref: index_ref}
-    |> IO.inspect(label: "WARMED", structs: false)
+  end
+
+  # %{"Some Field Value" => [123, 456]}
+  defp warm_index(%{data_tuple: {_, _, records}} = warm, field) do
+    lookup =
+      Enum.reduce(records, %{}, fn record, acc ->
+        add_to_lookup(acc, record, field, id(record, warm.id_key))
+      end)
+
+    key = Indexed.lookup_key(warm.entity_name, field)
+
+    :ets.insert(warm.index_ref, {key, lookup})
   end
 
   # If `pf_key` is nil, then we're warming the full set -- no prefilter.
@@ -150,9 +163,9 @@ defmodule Indexed.Actions.Warm do
     %{data_tuple: {d_dir, d_name, full_data}, entity_name: entity_name, index_ref: index_ref} =
       warm
 
-    warm_index = fn prefilter, field, data ->
+    warm_sorted = fn prefilter, field, data ->
       data_tuple = {d_dir, d_name, data}
-      warm_index(warm, prefilter, field, data_tuple)
+      warm_sorted(warm, prefilter, field, data_tuple)
     end
 
     Logger.debug("""
@@ -161,7 +174,7 @@ defmodule Indexed.Actions.Warm do
     """)
 
     if is_nil(pf_key) do
-      Enum.each(fields, &warm_index.(nil, &1, full_data))
+      Enum.each(fields, &warm_sorted.(nil, &1, full_data))
 
       # Store :maintain_unique fields on the nil prefilter. Other prefilters
       # imply a unique index and are handled when they are processed below.
@@ -186,16 +199,16 @@ defmodule Indexed.Actions.Warm do
       # For each value found for the prefilter, create a set of indexes.
       Enum.each(grouped, fn {pf_val, data} ->
         prefilter = {pf_key, pf_val}
-        Enum.each(fields, &warm_index.(prefilter, &1, data))
+        Enum.each(fields, &warm_sorted.(prefilter, &1, data))
         store_all_uniques(index_ref, entity_name, prefilter, pf_opts, data)
       end)
     end
   end
 
   @doc "Create the asc and desc indexes for one field."
-  @spec warm_index(t, Indexed.prefilter(), Entity.field(), data_tuple()) :: true
+  @spec warm_sorted(t, Indexed.prefilter(), Entity.field(), data_tuple()) :: true
   # Data direction hint matches this field -- no need to sort.
-  def warm_index(warm, prefilter, {name, _sort_hint}, {data_dir, name, data}) do
+  def warm_sorted(warm, prefilter, {name, _sort_hint}, {data_dir, name, data}) do
     data_ids = id_list(data, warm.id_key)
 
     asc_key = Indexed.index_key(warm.entity_name, prefilter, name)
@@ -208,7 +221,7 @@ defmodule Indexed.Actions.Warm do
   end
 
   # Data direction hint does NOT match this field -- sorting needed.
-  def warm_index(warm, prefilter, {name, _} = field, {_, _, data}) do
+  def warm_sorted(warm, prefilter, {name, _} = field, {_, _, data}) do
     asc_key = Indexed.index_key(warm.entity_name, prefilter, name)
     desc_key = Indexed.index_key(warm.entity_name, prefilter, {:desc, name})
     asc_ids = data |> Enum.sort(Warm.record_sort_fn(field)) |> id_list(warm.id_key)

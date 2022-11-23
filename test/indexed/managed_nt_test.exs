@@ -210,8 +210,7 @@ defmodule Indexed.ManagedNamedTableTest do
   test "indexes" do
     basic_setup()
 
-    Indexed.Managed.get_by(BlogServerNT, :users, :name, "bob")
-    |> IO.inspect(label: "GOT BOB!")
+    assert [%{name: "bob"}] = Indexed.Managed.get_by(BlogServerNT, :users, :name, "bob")
   end
 
   test "Nesty McNesterson" do

@@ -20,14 +20,31 @@ defmodule Indexed.Managed.Helpers do
 
   def with_state(%{} = sow, fun), do: fun.(sow)
 
+  @doc """
+  Given state, wrapped state, or a module, invoke `fun` with the
+  `t:Indexed.t/0`. If a module is given, use the index from its `__index__/0`.
+  """
   @spec with_index(M.state_or_module(), (Indexed.t() -> any)) :: any
-  def with_index(%{managed: state} = som, fun) do
-    with %M.State{} = new_managed <- fun.(state.index),
-         do: %{som | managed: new_managed}
-  end
+  def with_index(%{managed: state} = som, fun),
+    do: %{som | managed: with_index(state, fun)}
 
-  def with_index(%{} = som, fun), do: fun.(som)
-  def with_index(som, fun), do: fun.(som.__index__())
+  def with_index(%{} = som, fun),
+    do: do_with_index(som.index, som.module, fun)
+
+  def with_index(som, fun),
+    do: do_with_index(som.__index__(), som, fun)
+
+  def do_with_index(index, _mod, fun) when is_function(fun, 1), do: fun.(index)
+  def do_with_index(index, mod, fun), do: fun.(index, mod)
+
+  # @spec with_index(M.state_or_module(), (Indexed.t() -> any)) :: any
+  # def with_index(%{managed: state} = som, fun) do
+  #   with %M.State{} = new_managed <- fun.(state.index),
+  #        do: %{som | managed: new_managed}
+  # end
+  #
+  # def with_index(%{} = som, fun), do: fun.(som)
+  # def with_index(som, fun), do: fun.(som.__index__())
 
   # Returns true if we're holding in cache
   # another record with a has_many including the record for match_id.

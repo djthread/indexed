@@ -21,6 +21,7 @@ defmodule IndexedTest do
           cars: [
             fields: [:make],
             data: {:asc, :make, @cars},
+            lookups: [:make],
             prefilters: [:make]
           ]
         )
@@ -259,5 +260,18 @@ defmodule IndexedTest do
 
       assert car == Indexed.get(index, :cars, make_id.(car))
     end
+  end
+
+  test "lookup", %{index: index} do
+    assert [2] = Indexed.lookup_ids(index, :cars, :make, "Mazda")
+    assert [%{id: 2}] = Indexed.lookup(index, :cars, :make, "Mazda")
+
+    Indexed.put(index, :cars, %Car{id: 3, make: "Mazda"})
+
+    assert [%{id: 3}, %{id: 2}] = Indexed.lookup(index, :cars, :make, "Mazda")
+
+    :ok = Indexed.drop(index, :cars, 2)
+
+    assert [%{id: 3}] = Indexed.lookup(index, :cars, :make, "Mazda")
   end
 end
