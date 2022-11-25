@@ -150,7 +150,7 @@ defmodule Indexed.Managed do
         }
 
   @typedoc "For convenience, state is also accepted within a wrapping map."
-  @type state_or_wrapped :: %{:managed => state | nil, optional(any) => any} | state
+  @type state_or_wrapped :: state | %{:managed => state | nil, optional(any) => any}
 
   @typedoc "Allows for a table namespace to be given when no more is needed."
   @type state_or_module :: state_or_wrapped | module
@@ -253,18 +253,9 @@ defmodule Indexed.Managed do
       @managed_repo unquote(repo)
       Module.register_attribute(__MODULE__, :managed_setup, accumulate: true)
 
-      @doc "Create a Managed state struct, without index being initialized."
-      @spec init_managed_state :: Managed.State.t()
-      def init_managed_state, do: State.init(__MODULE__, unquote(repo))
-
-      @doc "Returns a freshly initialized state for `Indexed.Managed`."
-      @spec warm(atom, Managed.data_opt()) :: Managed.State.t()
-      def warm(name, data_opt), do: warm(name, data_opt, nil)
-
-      @doc "Get the `Ecto.Repo` module used for this instance of managed."
-      @spec repo :: Ecto.Repo.t()
-      def repo, do: @managed_repo
-
+      # If a namespace is configured, then ETS named table mode is on.
+      # These functions are excluded from the import above and these shortcut
+      # versions are attached instead, auto-passing the module name.
       if unquote(ns) do
         @doc "Get a record by id from a namespaced index. See `Indexed.Managed.get/4`."
         @spec get(atom, Indexed.id(), Managed.preloads_option()) :: any
@@ -287,6 +278,18 @@ defmodule Indexed.Managed do
         def get_records(name, prefilter \\ nil, order_hint \\ nil),
           do: Managed.get_records(__MODULE__, name, prefilter, order_hint)
       end
+
+      @doc "Create a Managed state struct, without index being initialized."
+      @spec init_managed_state :: Managed.State.t()
+      def init_managed_state, do: State.init(__MODULE__, unquote(repo))
+
+      @doc "Returns a freshly initialized state for `Indexed.Managed`."
+      @spec warm(atom, Managed.data_opt()) :: Managed.State.t()
+      def warm(name, data_opt), do: warm(name, data_opt, nil)
+
+      @doc "Get the `Ecto.Repo` module used for this instance of managed."
+      @spec repo :: Ecto.Repo.t()
+      def repo, do: @managed_repo
 
       @doc """
       Invoke this function with (`state, entity_name, data_opt`) or
@@ -354,10 +357,12 @@ defmodule Indexed.Managed do
 
       require unquote(module)
 
+      fields = Warm.resolve_fields_opt(unquote(opts[:fields] || []), unquote(name))
+
       @managed_setup %Managed{
         children: unquote(opts[:children] || []),
         manage_path: manage_path,
-        fields: unquote(opts[:fields] || []),
+        fields: fields,
         query: unquote(opts[:query]),
         id_key: unquote(opts[:id_key] || :id),
         lookups: unquote(opts[:lookups] || []),
