@@ -77,7 +77,7 @@ defmodule Indexed do
   def ets_opts(nil), do: @ets_opts
   def ets_opts(_), do: [:named_table | @ets_opts]
 
-  @doc "Get an entity by id from the index."
+  @doc "Get a record by id from the index."
   @spec get(t, atom, id, any) :: any
   def get(index, entity_name, id, default \\ nil) do
     index.entities
@@ -85,9 +85,17 @@ defmodule Indexed do
     |> Map.fetch!(:ref)
     |> :ets.lookup(id)
     |> case do
-      [{^id, val}] -> val
+      [{_, val}] -> val
       [] -> default
     end
+  end
+
+  @spec get_by(t, atom, atom, any) :: [record] | nil
+  def get_by(index, name, field, value) do
+    index
+    |> get_lookup(name, field)
+    |> Map.get(value, [])
+    |> Enum.map(&get(index, name, &1))
   end
 
   @spec lookup_ids(t, atom, atom, any) :: [id]

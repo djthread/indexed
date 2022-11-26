@@ -265,8 +265,8 @@ defmodule Indexed.Actions.Warm do
 
   @doc "Normalize fields."
   @spec resolve_fields_opt([atom | Entity.field()], atom) :: [Entity.field()]
-  def resolve_fields_opt(fields, entity_name) do
-    match?([_ | _], fields) || raise "At least one field to index is required on #{entity_name}."
+  def resolve_fields_opt(fields, _entity_name) do
+    # match?([_ | _], fields) || raise "At least one field to index is required on #{entity_name}."
 
     Enum.map(fields, fn
       {_name, _opts} = f -> f

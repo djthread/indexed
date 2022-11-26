@@ -52,18 +52,18 @@ defmodule Indexed.Managed do
   For each managed entity, the name (eg. `:cars`) and module (eg. `MyApp.Car`)
   must be specified. If needed, a keyword list of options should follow.
 
-  * `:children` - Keyword list with association fields as keys and
+  - `children` : Keyword list with association fields as keys and
     `t:assoc_spec/0`s as vals. This is used when recursing in `manage/5` as
     well as when resolving. If an undeclared association is resolved,
     `Repo.get/2` will be used as a fallback.
-  * `:query_fn` - Optional function which takes a queryable and returns a
-    queryable. This allows for extra query logic to be added such as populating
-    virtual fields. Invoked by `manage/5` when the association is needed.
-  * `:id_key` - Specifies how to find the id for a record.  It can be an atom
+  - `id_key` : Specifies how to find the id for a record.  It can be an atom
     field name to access, a function, or a tuple in the form `{module,
     function_name}`. In the latter two cases, the record will be passed in.
     Default `:id`.
-  * `:subscribe` and `:unsubscribe` - Functions which take a record's ID and
+  - `query_fn` : Optional function which takes a queryable and returns a
+    queryable. This allows for extra query logic to be added such as populating
+    virtual fields. Invoked by `manage/5` when the association is needed.
+  - `:subscribe` and `unsubscribe` : Functions which take a record's ID and
     manage the subscription. These must both be declared or neither.
 
   ## Tips
@@ -94,7 +94,7 @@ defmodule Indexed.Managed do
   # See `t:Indexed.Managed.State.tmp/1`, `add/4`, `rm/4` for details.
 
   import Ecto.Query, except: [preload: 3]
-  import Indexed.Helpers, only: [id: 2, normalize_preload: 1]
+  import Indexed.Helpers, only: [id: 2]
   import Indexed.Managed.Helpers
   alias Indexed.Actions.Warm
   alias Indexed.{Entity, View}
@@ -117,22 +117,22 @@ defmodule Indexed.Managed do
   ]
 
   @typedoc """
-  * `:children` - Map with assoc field name keys `t:assoc_spec_opt/0` values.
+  - `children` : Map with assoc field name keys `t:assoc_spec_opt/0` values.
     When this entity is managed, all children will also be managed and so on,
     recursively.
-  * `:fields` - Used to build the index. See `Managed.Entity.t/0`.
-  * `:id_key` - Used to get a record id. See `Managed.Entity.t/0`.
-  * `:lookups` - See `t:Managed.Entity.t/0`.
-  * `:query` - Optional function which takes a queryable and returns a
+  - `fields` : Used to build the index. See `Managed.Entity.t/0`.
+  - `id_key` : Used to get a record id. See `Managed.Entity.t/0`.
+  - `lookups` : See `t:Managed.Entity.t/0`.
+  - `query` : Optional function which takes a queryable and returns a
     queryable. This allows for extra query logic to be added such as populating
     virtual fields. Invoked by `manage/5` when the association is needed.
-  * `:manage_path` - Default associations to traverse for `manage/5`.
-  * `:module` - The struct module which will be used for the records.
-  * `:name` - Atom name of the managed entity.
-  * `:prefilters` - Used to build the index. See `Managed.Entity.t/0`.
-  * `:subscribe` - 1-arity function which subscribes to changes by id.
-  * `:tracked` - True if another entity has a :one assoc to this. Internal.
-  * `:unsubscribe` - 1-arity function which unsubscribes to changes by id.
+  - `manage_path` : Default associations to traverse for `manage/5`.
+  - `module` : The struct module which will be used for the records.
+  - `name` : Atom name of the managed entity.
+  - `prefilters` : Used to build the index. See `Managed.Entity.t/0`.
+  - `subscribe` : 1-arity function which subscribes to changes by id.
+  - `tracked` : True if another entity has a :one assoc to this. Internal.
+  - `unsubscribe` : 1-arity function which unsubscribes to changes by id.
   """
   @type t :: %Managed{
           children: children,
@@ -275,8 +275,8 @@ defmodule Indexed.Managed do
         @doc "Get a uniques list. "
         @spec get_records(atom, Indexed.prefilter(), Indexed.order_hint() | nil) ::
                 [Indexed.record()] | nil
-        def get_records(name, prefilter \\ nil, order_hint \\ nil),
-          do: Managed.get_records(__MODULE__, name, prefilter, order_hint)
+        def get_records(name, prefilter \\ nil, order_hint \\ nil, preload \\ nil),
+          do: Managed.get_records(__MODULE__, name, prefilter, order_hint, preload)
       end
 
       @doc "Create a Managed state struct, without index being initialized."
@@ -390,6 +390,7 @@ defmodule Indexed.Managed do
     end)
   end
 
+  # credo:disable-for-next-line
   defmacro __before_compile__(%{module: mod}) do
     attr = &Module.get_attribute(mod, &1)
     Prepare.validate_before_compile!(mod, attr.(:managed_repo), attr.(:managed_setup))
@@ -867,13 +868,13 @@ defmodule Indexed.Managed do
   def get_by(som, name, field, value, preloads \\ nil) do
     with_index(som, fn index ->
       index
-      |> Indexed.get_lookup(name, field)
-      |> Map.get(value, [])
-      |> Enum.map(&Indexed.get(index, name, &1))
+      |> Indexed.get_by(name, field, value)
       |> do_preload(som, preloads, name)
     end)
   end
 
+  @spec do_preload(record | [record] | nil, state_or_module, preloads_option, atom) ::
+          record | [record] | nil
   defp do_preload(record_or_list, som, preloads, name) do
     preloads =
       if true == preloads,
@@ -928,11 +929,13 @@ defmodule Indexed.Managed do
   end
 
   @doc "Invoke `Indexed.get_records/4` with a wrapped state for convenience."
-  @spec get_records(state_or_module, atom, prefilter, order_hint | nil) ::
+  @spec get_records(state_or_module, atom, prefilter, order_hint | nil, preloads) ::
           [record] | nil
-  def get_records(som, name, prefilter \\ nil, order_hint \\ nil) do
+  def get_records(som, name, prefilter \\ nil, order_hint \\ nil, preloads \\ nil) do
     with_index(som, fn index ->
-      Indexed.get_records(index, name, prefilter, order_hint)
+      index
+      |> Indexed.get_records(name, prefilter, order_hint)
+      |> preload(som, preloads)
     end)
   end
 
