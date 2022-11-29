@@ -62,6 +62,7 @@ defmodule Indexed do
   """
   @type lookup :: %{any => [id]}
 
+  defdelegate prewarm(args), to: Indexed.Actions.Warm, as: :run
   defdelegate warm(args), to: Indexed.Actions.Warm, as: :run
   defdelegate put(index, entity_name, record), to: Indexed.Actions.Put, as: :run
   defdelegate drop(index, entity_name, id), to: Indexed.Actions.Drop, as: :run
@@ -179,7 +180,7 @@ defmodule Indexed do
   `prefilter` - 2-element tuple (`t:prefilter/0`) indicating which
   sub-section of the data should be queried. Default is `nil` - no prefilter.
   """
-  @spec get_records(t, atom, prefilter, order_hint | nil) :: [record] | nil
+  @spec get_records(t, atom, prefilter, order_hint | nil) :: [record]
   def get_records(index, entity_name, prefilter, order_hint \\ nil) do
     default_order_hint = fn ->
       path = [Access.key(:entities), entity_name, Access.key(:fields)]
@@ -187,11 +188,9 @@ defmodule Indexed do
     end
 
     order_hint = order_hint || default_order_hint.()
+    cached_list = get_index(index, entity_name, prefilter, order_hint)
 
-    with records when is_list(records) <-
-           get_index(index, entity_name, prefilter, order_hint) do
-      Enum.map(records, &get(index, entity_name, &1))
-    end
+    Enum.map(cached_list || [], &get(index, entity_name, &1))
   end
 
   @doc "Cache key for a given entity, field and direction."

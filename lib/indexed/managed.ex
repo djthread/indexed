@@ -229,7 +229,7 @@ defmodule Indexed.Managed do
         # If named tables are used, state isn't needed and shortcut versions
         # of these functions are added.
         quote do
-          import(unquote(__MODULE__),
+          import unquote(__MODULE__),
             except: [
               get: 3,
               get: 4,
@@ -239,10 +239,11 @@ defmodule Indexed.Managed do
               get_records: 3,
               get_records: 4
             ]
-          )
         end
       else
-        quote do: import(unquote(__MODULE__))
+        quote do
+          import unquote(__MODULE__)
+        end
       end
 
     quote do
@@ -277,6 +278,17 @@ defmodule Indexed.Managed do
                 [Indexed.record()] | nil
         def get_records(name, prefilter \\ nil, order_hint \\ nil, preload \\ nil),
           do: Managed.get_records(__MODULE__, name, prefilter, order_hint, preload)
+
+        defoverridable get: 2,
+                       get: 3,
+                       get_by: 3,
+                       get_by: 4,
+                       get_uniques_list: 2,
+                       get_uniques_list: 3,
+                       get_records: 1,
+                       get_records: 2,
+                       get_records: 3,
+                       get_records: 4
       end
 
       @doc "Create a Managed state struct, without index being initialized."
@@ -929,8 +941,7 @@ defmodule Indexed.Managed do
   end
 
   @doc "Invoke `Indexed.get_records/4` with a wrapped state for convenience."
-  @spec get_records(state_or_module, atom, prefilter, order_hint | nil, preloads) ::
-          [record] | nil
+  @spec get_records(state_or_module, atom, prefilter, order_hint | nil, preloads) :: [record]
   def get_records(som, name, prefilter \\ nil, order_hint \\ nil, preloads \\ nil) do
     with_index(som, fn index ->
       index
