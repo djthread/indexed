@@ -159,9 +159,9 @@ defmodule Indexed do
   For the given data set, get a list (sorted ascending) of unique values for
   `field_name` under `entity_name`. Returns `nil` if no data is found.
   """
-  @spec get_uniques_list(t, atom, prefilter, atom) :: list | nil
+  @spec get_uniques_list(t, atom, prefilter, atom) :: list
   def get_uniques_list(index, entity_name, prefilter, field_name) do
-    get_index(index, uniques_list_key(entity_name, prefilter, field_name))
+    get_index(index, uniques_list_key(entity_name, prefilter, field_name)) || []
   end
 
   @doc """
@@ -169,9 +169,9 @@ defmodule Indexed do
   `field_name` under `entity_name` and vals are occurrence counts. Returns
   `nil` if no data is found.
   """
-  @spec get_uniques_map(t, atom, prefilter, atom) :: Indexed.UniquesBundle.counts_map() | nil
+  @spec get_uniques_map(t, atom, prefilter, atom) :: Indexed.UniquesBundle.counts_map()
   def get_uniques_map(index, entity_name, prefilter, field_name) do
-    get_index(index, uniques_map_key(entity_name, prefilter, field_name))
+    get_index(index, uniques_map_key(entity_name, prefilter, field_name)) || %{}
   end
 
   @doc """

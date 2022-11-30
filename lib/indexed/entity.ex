@@ -3,7 +3,8 @@ defmodule Indexed.Entity do
   defstruct fields: [], id_key: :id, lookups: [], prefilters: [], ref: nil
 
   @typedoc """
-  * `:fields` - List of `t:field/0`s to be indexed for this entity.
+  * `:fields` - List of `t:field/0`s for which pairs of lists should be
+    maintained with the ID sorted ascending and descending.
   * `:id_key` - Specifies how to find the id for a record.  It can be an atom
     field name to access, a function, or a tuple in the form `{module,
     function_name}`. In the latter two cases, the record will be passed in.

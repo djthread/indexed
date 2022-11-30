@@ -55,11 +55,21 @@ defmodule Indexed.Managed do
   - `children` : Keyword list with association fields as keys and
     `t:assoc_spec/0`s as vals. This is used when recursing in `manage/5` as
     well as when resolving. If an undeclared association is resolved,
-    `Repo.get/2` will be used as a fallback.
+    `Repo.get/2` will be used as a fallback. Will automatically include fields
+    given in `manage_path`.
+  - `fields` : List of fields which should be sortable (ascending and
+    descending). See `Indexed.Entity`.
   - `id_key` : Specifies how to find the id for a record.  It can be an atom
     field name to access, a function, or a tuple in the form `{module,
     function_name}`. In the latter two cases, the record will be passed in.
     Default `:id`.
+  - `manage_path` : Default associations to traverse for `manage/5`.
+    Also, this is the preload argument when `true` is used.
+  - `prefilters` - List of atoms indicating which fields should be
+    prefiltered on. This means that separate indexes will be managed for each
+    unique value for each of these fields, across all records of this entity
+    type. Each two-element tuple has the field name atom and a keyword list
+    of options.
   - `query_fn` : Optional function which takes a queryable and returns a
     queryable. This allows for extra query logic to be added such as populating
     virtual fields. Invoked by `manage/5` when the association is needed.
@@ -273,7 +283,6 @@ defmodule Indexed.Managed do
           do: Managed.get_uniques_list(__MODULE__, name, prefilter, field_name)
 
         @doc "Get a list of records. See `Indexed.Managed.get_records/4`."
-        @doc "Get a uniques list. "
         @spec get_records(atom, Indexed.prefilter(), Indexed.order_hint() | nil) ::
                 [Indexed.record()] | nil
         def get_records(name, prefilter \\ nil, order_hint \\ nil, preload \\ nil),
@@ -367,12 +376,19 @@ defmodule Indexed.Managed do
           path -> normalize_preload(path)
         end
 
+      extra_children =
+        Enum.map(manage_path, fn
+          {field, _} -> field
+          field -> field
+        end)
+
       require unquote(module)
 
+      children = Enum.uniq(unquote(opts[:children] || []) ++ extra_children)
       fields = Warm.resolve_fields_opt(unquote(opts[:fields] || []), unquote(name))
 
       @managed_setup %Managed{
-        children: unquote(opts[:children] || []),
+        children: children,
         manage_path: manage_path,
         fields: fields,
         query: unquote(opts[:query]),
