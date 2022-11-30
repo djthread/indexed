@@ -126,7 +126,7 @@ defmodule Indexed.Actions.Warm do
 
         # Create lookups: %{"Some Field Value" => [123, 456]}
         for field_name <- lookups,
-            do: warm_index(warm, field_name)
+            do: warm_lookups(warm, field_name)
 
         {entity_name,
          %Entity{
@@ -142,7 +142,7 @@ defmodule Indexed.Actions.Warm do
   end
 
   # %{"Some Field Value" => [123, 456]}
-  defp warm_index(%{data_tuple: {_, _, records}} = warm, field) do
+  defp warm_lookups(%{data_tuple: {_, _, records}} = warm, field) do
     lookup =
       Enum.reduce(records, %{}, fn record, acc ->
         add_to_lookup(acc, record, field, id(record, warm.id_key))

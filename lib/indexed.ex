@@ -81,17 +81,13 @@ defmodule Indexed do
   @doc "Get a record by id from the index."
   @spec get(t, atom, id, any) :: any
   def get(index, entity_name, id, default \\ nil) do
-    index.entities
-    |> Map.fetch!(entity_name)
-    |> Map.fetch!(:ref)
-    |> :ets.lookup(id)
-    |> case do
+    case :ets.lookup(Map.fetch!(index.entities, entity_name).ref, id) do
       [{_, val}] -> val
       [] -> default
     end
   end
 
-  @spec get_by(t, atom, atom, any) :: [record] | nil
+  @spec get_by(t, atom, atom, any) :: [record]
   def get_by(index, name, field, value) do
     index
     |> get_lookup(name, field)

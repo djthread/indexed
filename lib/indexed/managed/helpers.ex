@@ -37,15 +37,6 @@ defmodule Indexed.Managed.Helpers do
   def do_with_index(index, _mod, fun) when is_function(fun, 1), do: fun.(index)
   def do_with_index(index, mod, fun), do: fun.(index, mod)
 
-  # @spec with_index(M.state_or_module(), (Indexed.t() -> any)) :: any
-  # def with_index(%{managed: state} = som, fun) do
-  #   with %M.State{} = new_managed <- fun.(state.index),
-  #        do: %{som | managed: new_managed}
-  # end
-  #
-  # def with_index(%{} = som, fun), do: fun.(som)
-  # def with_index(som, fun), do: fun.(som.__index__())
-
   # Returns true if we're holding in cache
   # another record with a has_many including the record for match_id.
   @spec has_referring_many?(state, atom, id) :: boolean
