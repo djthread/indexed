@@ -1,7 +1,7 @@
 defmodule Indexed.MixProject do
   use Mix.Project
 
-  @source_url "https://github.com/instinctscience/indexed"
+  @source_url "https://github.com/djthread/indexed"
   @version "0.1.0"
 
   def project do
@@ -31,8 +31,8 @@ defmodule Indexed.MixProject do
 
       # Docs
       name: "Indexed",
-      source_url: "https://github.com/instinctscience/indexed",
-      homepage_url: "https://github.com/instinctscience/indexed",
+      source_url: "https://github.com/djthread/indexed",
+      homepage_url: "https://github.com/djthread/indexed",
       docs: [
         main: "Indexed",
         extras: ["README.md"]
