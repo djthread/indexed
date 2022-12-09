@@ -287,7 +287,7 @@ defmodule Indexed.Actions.Put do
   def insert_by(put, old_desc_ids, {name, opts}) do
     find_fun =
       case opts[:sort] do
-        :date_time ->
+        :datetime ->
           fn id ->
             val = Map.get(Indexed.get(put.index, put.entity_name, id), name)
             :lt == DateTime.compare(val, Map.get(put.record, name))

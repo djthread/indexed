@@ -220,7 +220,7 @@ defmodule IndexedTest do
     index =
       Indexed.warm(
         cars: [
-          fields: [{:inserted_at, sort: :date_time}],
+          fields: [{:inserted_at, sort: :datetime}],
           data: cars
         ]
       )

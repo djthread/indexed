@@ -115,7 +115,7 @@ defmodule Indexed.Managed.Helpers do
   def preload_fn({:many, name, pf_key, order_hint}, _repo) do
     fn record, state_or_module ->
       pf = if pf_key, do: {pf_key, record.id}, else: nil
-      M.get_records(state_or_module, name, pf, order_hint) || []
+      M.get_records(state_or_module, name, pf, order_hint)
     end
   end
 
@@ -136,10 +136,13 @@ defmodule Indexed.Managed.Helpers do
 
   # Unload all associations (or only `assocs`) in an ecto schema struct.
   @spec drop_associations(struct, [atom] | nil) :: struct
-  def drop_associations(%mod{} = schema, assocs \\ nil) do
-    Enum.reduce(assocs || mod.__schema__(:associations), schema, fn association, schema ->
-      %{schema | association => build_not_loaded(mod, association)}
+  def drop_associations(%mod{} = struct, assocs \\ nil) do
+    Enum.reduce(assocs || mod.__schema__(:associations), struct, fn association, struct ->
+      %{struct | association => build_not_loaded(mod, association)}
     end)
+  rescue
+    # If struct is not an Ecto.Schema, we will silently not drop associations.
+    UndefinedFunctionError -> struct
   end
 
   @spec build_not_loaded(module, atom) :: Ecto.Association.NotLoaded.t()

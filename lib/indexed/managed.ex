@@ -231,7 +231,7 @@ defmodule Indexed.Managed do
   @typep state :: State.t()
 
   defmacro __using__(opts) do
-    repo = Keyword.fetch!(opts, :repo)
+    repo = opts[:repo]
     ns = opts[:namespace]
 
     import_line =
@@ -288,6 +288,12 @@ defmodule Indexed.Managed do
         def get_records(name, prefilter \\ nil, order_hint \\ nil, preload \\ nil),
           do: Managed.get_records(__MODULE__, name, prefilter, order_hint, preload)
 
+        if Code.ensure_loaded?(Paginator) do
+          @doc "Paginate records. See `Indexed.Actions.Paginate`."
+          @spec paginate(atom, keyword) :: any
+          def paginate(name, params \\ []), do: Managed.paginate(__MODULE__, name, params)
+        end
+
         defoverridable get: 2,
                        get: 3,
                        get_by: 3,
@@ -297,7 +303,9 @@ defmodule Indexed.Managed do
                        get_records: 1,
                        get_records: 2,
                        get_records: 3,
-                       get_records: 4
+                       get_records: 4,
+                       paginate: 1,
+                       paginate: 2
       end
 
       @doc "Create a Managed state struct, without index being initialized."
@@ -308,8 +316,11 @@ defmodule Indexed.Managed do
       @spec warm(atom, Managed.data_opt()) :: Managed.State.t()
       def warm(name, data_opt), do: warm(name, data_opt, nil)
 
-      @doc "Get the `Ecto.Repo` module used for this instance of managed."
-      @spec repo :: Ecto.Repo.t()
+      @doc """
+      Get the `Ecto.Repo` module used for this instance of managed.
+      `nil` if none is configured.
+      """
+      @spec repo :: Ecto.Repo.t() | nil
       def repo, do: @managed_repo
 
       @doc """
@@ -368,8 +379,16 @@ defmodule Indexed.Managed do
   end
 
   @doc "Define a managed entity."
-  defmacro managed(name, module, opts \\ []) do
+  defmacro managed(name, module_or_opts \\ nil, opts \\ []) do
+    {module, opts} =
+      if is_list(module_or_opts),
+        do: {nil, module_or_opts},
+        else: {module_or_opts, opts}
+
     quote do
+      # If a module is given, make sure it's compiled first.
+      unquote(if module, do: quote(do: require(unquote(module))))
+
       manage_path =
         case unquote(opts[:manage_path]) do
           nil -> []
@@ -381,8 +400,6 @@ defmodule Indexed.Managed do
           {field, _} -> field
           field -> field
         end)
-
-      require unquote(module)
 
       children = Enum.uniq(unquote(opts[:children] || []) ++ extra_children)
       fields = Warm.resolve_fields_opt(unquote(opts[:fields] || []), unquote(name))
@@ -468,13 +485,14 @@ defmodule Indexed.Managed do
       function which will take a record and state and return the association
       record or list of records for `key`.
       """
-      @spec __preload_fn__(atom, atom, module) :: (map, Managed.State.t() -> map | [map]) | nil
+      @spec __preload_fn__(atom, atom, module | nil) ::
+              (map, Managed.State.t() -> map | [map]) | nil
       def __preload_fn__(name, key, repo) do
         pl = &Managed.Helpers.preload_fn(&1, repo)
 
         case Enum.find(@managed, &(&1.name == name or &1.module == name)) do
           %{children: %{^key => assoc_spec}} -> pl.(assoc_spec)
-          %{} = managed -> pl.({:repo, key, managed})
+          %{} = managed -> pl.(repo && {:repo, key, managed})
           nil -> nil
         end
       end
@@ -868,7 +886,7 @@ defmodule Indexed.Managed do
     {state, assoc_records} =
       Enum.reduce(records, {state, []}, fn record, {acc_state, acc_assoc_records} ->
         id = id(record, id_key)
-        assoc_records = get_records(acc_state, assoc_name, {fkey, id}) || []
+        assoc_records = get_records(acc_state, assoc_name, {fkey, id})
         fun = &rm(&2, {name, id, path_entry}, assoc_managed, &1)
         acc_state = Enum.reduce(assoc_records, acc_state, fun)
 
@@ -941,11 +959,9 @@ defmodule Indexed.Managed do
   end
 
   @doc "Invoke `Indexed.get_index/4` with a wrapped state for convenience."
-  @spec get_index(state_or_wrapped, atom, prefilter) :: list | map | nil
-  def get_index(state, name, prefilter \\ nil, order_hint \\ nil) do
-    with_state(state, fn %{index: index} ->
-      Indexed.get_index(index, name, prefilter, order_hint)
-    end)
+  @spec get_index(state_or_module, atom, prefilter) :: list | map | nil
+  def get_index(som, name, prefilter \\ nil, order_hint \\ nil) do
+    with_index(som, &Indexed.get_index(&1, name, prefilter, order_hint))
   end
 
   @doc "Invoke `Indexed.get_lookup/3` with a wrapped state for convenience."
@@ -992,20 +1008,17 @@ defmodule Indexed.Managed do
   end
 
   if Code.ensure_loaded?(Paginator) do
-    @spec paginate(state_or_wrapped, atom, keyword) :: Paginator.Page.t() | nil
-    def paginate(state, name, params) do
-      with_state(state, fn %{index: index} ->
-        Indexed.paginate(index, name, params)
-      end)
+    @doc "List `name` records using the Paginator interface."
+    @spec paginate(state_or_module, atom, keyword) :: Paginator.Page.t() | nil
+    def paginate(som, name, params) do
+      with_index(som, &Indexed.paginate(&1, name, params))
     end
   end
 
   @doc "Invoke `Indexed.get_view/3` with a wrapped state for convenience."
-  @spec get_view(state_or_wrapped, atom, View.fingerprint()) :: View.t() | nil
-  def get_view(state, name, fingerprint) do
-    with_state(state, fn %{index: index} ->
-      Indexed.get_view(index, name, fingerprint)
-    end)
+  @spec get_view(state_or_module, atom, View.fingerprint()) :: View.t() | nil
+  def get_view(som, name, fingerprint) do
+    with_index(som, &Indexed.get_view(&1, name, fingerprint))
   end
 
   # Returns a listing of entities and number of records in the cache for each.

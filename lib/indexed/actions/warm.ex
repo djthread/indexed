@@ -59,7 +59,7 @@ defmodule Indexed.Actions.Warm do
       sorted by field (atom) and direction (:asc or :desc), `t:data_tuple/0`.
     * `list` - data list with unknown ordering; must be sorted for every field.
   * `:fields` - List of field name atoms to index by. At least one required.
-    * If field is a DateTime, use sort: `{:my_field, sort: :date_time}`.
+    * If field is a DateTime, use sort: `{:my_field, sort: :datetime}`.
     * Ascending and descending will be indexed for each field.
   * `:id_key` - Primary key to use in indexes and for accessing the records of
     this entity.  See `t:Indexed.Entity.t/0`. Default: `:id`.
@@ -234,7 +234,7 @@ defmodule Indexed.Actions.Warm do
   @spec record_sort_fn(Entity.field()) :: (any, any -> boolean)
   def record_sort_fn({name, opts}) do
     case opts[:sort] do
-      :date_time -> &(:lt == DateTime.compare(Map.get(&1, name), Map.get(&2, name)))
+      :datetime -> &(:lt == DateTime.compare(Map.get(&1, name), Map.get(&2, name)))
       nil -> &(Map.get(&1, name) < Map.get(&2, name))
     end
   end
