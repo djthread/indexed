@@ -292,6 +292,8 @@ defmodule Indexed.Managed do
           @doc "Paginate records. See `Indexed.Actions.Paginate`."
           @spec paginate(atom, keyword) :: any
           def paginate(name, params \\ []), do: Managed.paginate(__MODULE__, name, params)
+
+          defoverridable paginate: 1, paginate: 2
         end
 
         defoverridable get: 2,
@@ -303,9 +305,7 @@ defmodule Indexed.Managed do
                        get_records: 1,
                        get_records: 2,
                        get_records: 3,
-                       get_records: 4,
-                       paginate: 1,
-                       paginate: 2
+                       get_records: 4
       end
 
       @doc "Create a Managed state struct, without index being initialized."
