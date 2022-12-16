@@ -220,7 +220,7 @@ defmodule IndexedTest do
     index =
       Indexed.warm(
         cars: [
-          fields: [{:inserted_at, sort: :date_time}],
+          fields: [{:inserted_at, sort: :datetime}],
           data: cars
         ]
       )
@@ -273,5 +273,15 @@ defmodule IndexedTest do
     :ok = Indexed.drop(index, :cars, 2)
 
     assert [%{id: 3}] = Indexed.lookup(index, :cars, :make, "Mazda")
+  end
+
+  test "prewarm" do
+    index = Indexed.prewarm(cars: [fields: [:make]])
+
+    assert nil == Indexed.get(index, :cars, 1)
+
+    Indexed.warm(index, cars: [data: {:asc, :make, @cars}])
+
+    assert %Car{id: 1, make: "Lamborghini"} == Indexed.get(index, :cars, 1)
   end
 end

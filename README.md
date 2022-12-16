@@ -73,7 +73,7 @@ cars = [
 ]
 
 # Sidenote: for date fields, instead of an atom (`:make`) use a tuple with the
-# sort option like `{:updated_at, sort: :date_time}`.
+# sort option like `{:updated_at, sort: :datetime}`.
 index =
   Indexed.warm(
     cars: [fields: [:make], data: cars]

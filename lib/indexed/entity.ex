@@ -38,7 +38,7 @@ defmodule Indexed.Entity do
   ## Options
 
   * `:sort` - Indicates how the field should be sorted in ascending order:
-    * `:date_time` - `DateTime.compare/2` should be used for sorting.
+    * `:datetime` - `DateTime.compare/2` should be used for sorting.
     * `nil` (default) - `Enum.sort/1` will be used.
   """
   @type field :: {field_name, opts :: keyword}

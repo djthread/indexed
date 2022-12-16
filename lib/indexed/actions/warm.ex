@@ -35,7 +35,9 @@ defmodule Indexed.Actions.Warm do
   @type data_opt :: data_tuple | Indexed.record() | [Indexed.record()] | nil
 
   @doc """
-  For a set of entities, load data and indexes to ETS for each.
+  For a set of entities, "prewarm" the cache by validating and normalizing all
+  options and creating the ETS tables. Data and indexes will be created during
+  the main "warm" step which comes next.
 
   Argument is a keyword list where the top level has:
 
@@ -53,13 +55,8 @@ defmodule Indexed.Actions.Warm do
   as keys and keyword lists of options are values. Allowed options are as
   follows:
 
-  * `:data` - List of maps (with id key) -- the data to index and cache.
-    Required. May take one of the following forms:
-    * `{direction, field, list}` - data `list`, with a hint that it is already
-      sorted by field (atom) and direction (:asc or :desc), `t:data_tuple/0`.
-    * `list` - data list with unknown ordering; must be sorted for every field.
   * `:fields` - List of field name atoms to index by. At least one required.
-    * If field is a DateTime, use sort: `{:my_field, sort: :date_time}`.
+    * If field is a DateTime, use sort: `{:my_field, sort: :datetime}`.
     * Ascending and descending will be indexed for each field.
   * `:id_key` - Primary key to use in indexes and for accessing the records of
     this entity.  See `t:Indexed.Entity.t/0`. Default: `:id`.
@@ -83,50 +80,19 @@ defmodule Indexed.Actions.Warm do
       option as these are automatically included. These lists can be fetched
       via `get_uniques_list/4`.
   """
-  @spec run(keyword) :: Indexed.t()
-  def run(args \\ []) do
+  @spec pre(keyword) :: Indexed.t()
+  def pre(args \\ []) do
     ns = args[:namespace]
     ets_opts = Indexed.ets_opts(ns)
     index_ref = :ets.new(Indexed.table_name(ns), ets_opts)
 
     entities =
       Map.new(args[:entities] || args, fn {entity_name, opts} ->
-        ref =
-          ns
-          |> Indexed.table_name(entity_name)
-          |> :ets.new(ets_opts)
-
+        ref = :ets.new(Indexed.table_name(ns, entity_name), ets_opts)
         fields = resolve_fields_opt(opts[:fields], entity_name)
         id_key = opts[:id_key] || :id
         lookups = opts[:lookups] || []
         prefilter_configs = resolve_prefilters_opt(opts[:prefilters])
-
-        {_dir, _field, full_data} =
-          data_tuple = resolve_data_opt(opts[:data], entity_name, fields)
-
-        # Load the records into ETS, keyed by :id or the :id_key field.
-        Enum.each(full_data, &:ets.insert(ref, {id(&1, id_key), &1}))
-
-        warm = %Warm{
-          data_tuple: data_tuple,
-          entity_name: entity_name,
-          id_key: id_key,
-          index_ref: index_ref
-        }
-
-        Logger.debug("Warming #{entity_name}...")
-
-        # Create and insert the caches for this entity: for each prefilter
-        # configured, build & store indexes for each indexed field.
-        # Internally, a `t:prefilter/0` refers to a `{:my_field, "possible
-        # value"}` tuple or `nil` which we implicitly include, where no
-        # prefilter is applied.
-        for prefilter_config <- prefilter_configs,
-            do: warm_prefilter(warm, prefilter_config, fields)
-
-        # Create lookups: %{"Some Field Value" => [123, 456]}
-        for field_name <- lookups,
-            do: warm_lookups(warm, field_name)
 
         {entity_name,
          %Entity{
@@ -139,6 +105,62 @@ defmodule Indexed.Actions.Warm do
       end)
 
     %Indexed{entities: entities, index_ref: index_ref}
+  end
+
+  @doc """
+  See `pre/1`. The only difference is that the `:data` entity option is allowed:
+
+  * `:data` - List of maps (with id key) -- the data to index and cache.
+    Required. May take one of the following forms:
+    * `{direction, field, list}` - data `list`, with a hint that it is already
+      sorted by field (atom) and direction (:asc or :desc), `t:data_tuple/0`.
+    * `list` - data list with unknown ordering; must be sorted for every field.
+  """
+  @spec run(keyword) :: Indexed.t()
+  def run(args) do
+    do_run(pre(args), args)
+  end
+
+  @spec run(Indexed.t(), keyword) :: Indexed.t()
+  def run(index, args) do
+    do_run(index, args)
+  end
+
+  # Assuming prewarm is done, load the data.
+  @spec do_run(Indexed.t(), keyword) :: Indexed.t()
+  defp do_run(index, args) do
+    for {entity_name, opts} <- args[:entities] || args do
+      entity = Map.fetch!(index.entities, entity_name)
+
+      {_dir, _field, full_data} =
+        data_tuple = resolve_data_opt(opts[:data], entity_name, entity.fields)
+
+      # Load the records into ETS, keyed by :id or the :id_key field.
+      Enum.each(full_data, &:ets.insert(entity.ref, {id(&1, entity.id_key), &1}))
+
+      warm = %Warm{
+        data_tuple: data_tuple,
+        entity_name: entity_name,
+        id_key: entity.id_key,
+        index_ref: index.index_ref
+      }
+
+      Logger.debug("Warming #{entity_name}...")
+
+      # Create and insert the caches for this entity: for each prefilter
+      # configured, build & store indexes for each indexed field.
+      # Internally, a `t:prefilter/0` refers to a `{:my_field, "possible
+      # value"}` tuple or `nil` which we implicitly include, where no
+      # prefilter is applied.
+      for prefilter_config <- entity.prefilters,
+          do: warm_prefilter(warm, prefilter_config, entity.fields)
+
+      # Create lookups: %{"Some Field Value" => [123, 456]}
+      for field_name <- entity.lookups,
+          do: warm_lookups(warm, field_name)
+    end
+
+    index
   end
 
   # %{"Some Field Value" => [123, 456]}
@@ -173,7 +195,7 @@ defmodule Indexed.Actions.Warm do
     #{inspect(Enum.map(fields, &elem(&1, 0)))}\
     """)
 
-    if is_nil(pf_key) do
+    if nil == pf_key do
       Enum.each(fields, &warm_sorted.(nil, &1, full_data))
 
       # Store :maintain_unique fields on the nil prefilter. Other prefilters
@@ -234,7 +256,7 @@ defmodule Indexed.Actions.Warm do
   @spec record_sort_fn(Entity.field()) :: (any, any -> boolean)
   def record_sort_fn({name, opts}) do
     case opts[:sort] do
-      :date_time -> &(:lt == DateTime.compare(Map.get(&1, name), Map.get(&2, name)))
+      :datetime -> &(:lt == DateTime.compare(Map.get(&1, name), Map.get(&2, name)))
       nil -> &(Map.get(&1, name) < Map.get(&2, name))
     end
   end

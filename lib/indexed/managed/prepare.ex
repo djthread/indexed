@@ -111,7 +111,7 @@ defmodule Indexed.Managed.Prepare do
     end) || raise "No entity module #{mod} in #{inspect(Enum.map(manageds, & &1.module))}"
   end
 
-  @spec validate_before_compile!(module, module, list) :: :ok
+  @spec validate_before_compile!(module | nil, module, list) :: :ok
   # credo:disable-for-next-line Credo.Check.Refactor.CyclomaticComplexity
   def validate_before_compile!(mod, _repo, managed) do
     for %{children: _children, module: module, name: name, subscribe: sub, unsubscribe: unsub} <-
@@ -121,8 +121,8 @@ defmodule Indexed.Managed.Prepare do
       if (sub != nil and is_nil(unsub)) or (unsub != nil and is_nil(sub)),
         do: raise("Must have both :subscribe and :unsubscribe or neither #{inf}.")
 
-      function_exported?(module, :__schema__, 1) ||
-        raise "#{inspect(module)} should be an Ecto.Schema module #{inf}"
+      is_nil(mod) || is_atom(mod) ||
+        raise "#{inspect(module)} should be a struct module or nil #{inf}"
     end
 
     :ok
