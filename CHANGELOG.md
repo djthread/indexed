@@ -7,13 +7,17 @@ and this project adheres to [Semantic
 Versioning](https://semver.org/spec/v2.0.0.html).
 
 
-## [0.2.0] - Unreleased
+## [0.2.0] - 2022-12-16
 
 ### Added
 - Managed: `:repo` option on `use Indexed.Managed` is now optional. Also,
   specifying a module on the `managed` lines is optional. This means that
   Managed can now work with non-`Ecto.Schema` maps, just like when using
   Indexed directly. Some auto-discovery features may not be available, though.
+- Prewarm ability on Indexed and Managed layers. This means a
+  `c:GenServer.init/1` can validate and initialize configuration, then create
+  the ETS tables, without inserting data. A `c:GenServer.handle_continue/2`
+  can then be used to do the heavy work of loading the data.
 
 ### Changed
 - Managed: `field` sort option is now `:datetime` instead of `:date_time`.

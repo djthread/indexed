@@ -312,7 +312,11 @@ defmodule Indexed.Managed do
       @spec init_managed_state :: Managed.State.t()
       def init_managed_state, do: State.init(__MODULE__, unquote(repo))
 
-      @doc "Returns a freshly initialized state for `Indexed.Managed`."
+      @doc "Create ETS tables, init fresh state, without loading data."
+      @spec prewarm(Managed.state_or_wrapped() | nil) :: Managed.State.t()
+      def prewarm(sow \\ nil), do: Managed.prewarm(sow || init_managed_state(), __MODULE__)
+
+      @doc "Returns a fresh state for `Indexed.Managed`."
       @spec warm(atom, Managed.data_opt()) :: Managed.State.t()
       def warm(name, data_opt), do: warm(name, data_opt, nil)
 
@@ -337,14 +341,22 @@ defmodule Indexed.Managed do
       def warm(a, b, c), do: warm(init_managed_state(), a, b, c)
 
       @doc "Returns a freshly initialized state for `Indexed.Managed`."
-      @spec warm(Managed.state_or_wrapped(), atom, Managed.data_opt(), Managed.path()) ::
+      @spec warm(Managed.state_or_wrapped(), atom, Managed.data_opt(), Managed.path(), keyword) ::
               Managed.state_or_wrapped()
-      def warm(state, name, data_opt, path) do
+      def warm(state, name, data_opt, path, opts \\ []) do
         opts = [namespace: unquote(ns)]
         fun = &do_warm(&1 || init_managed_state(), name, data_opt, path, opts)
         Managed.Helpers.with_state(state, fun)
       end
     end
+  end
+
+  @doc "Create ETS tables, init fresh state, without loading data."
+  @spec prewarm(Managed.state_or_wrapped(), module) :: Managed.state_or_wrapped()
+  def prewarm(sow, mod) do
+    Enum.reduce(mod.__managed_names__(), sow, fn name, acc ->
+      mod.warm(acc, name, [], [])
+    end)
   end
 
   @doc "Loads initial data into index."

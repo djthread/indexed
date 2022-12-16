@@ -6,7 +6,7 @@ end
 
 defmodule Indexed do
   @moduledoc """
-  Tools for creating an index module.
+  Tools for creating an index.
   """
   alias Indexed.View
   alias __MODULE__
@@ -62,8 +62,9 @@ defmodule Indexed do
   """
   @type lookup :: %{any => [id]}
 
-  defdelegate prewarm(args), to: Indexed.Actions.Warm, as: :run
+  defdelegate prewarm(args), to: Indexed.Actions.Warm, as: :pre
   defdelegate warm(args), to: Indexed.Actions.Warm, as: :run
+  defdelegate warm(index, args), to: Indexed.Actions.Warm, as: :run
   defdelegate put(index, entity_name, record), to: Indexed.Actions.Put, as: :run
   defdelegate drop(index, entity_name, id), to: Indexed.Actions.Drop, as: :run
   defdelegate create_view(index, entity_name, fp, opts), to: Indexed.Actions.CreateView, as: :run

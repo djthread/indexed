@@ -274,4 +274,14 @@ defmodule IndexedTest do
 
     assert [%{id: 3}] = Indexed.lookup(index, :cars, :make, "Mazda")
   end
+
+  test "prewarm" do
+    index = Indexed.prewarm(cars: [fields: [:make]])
+
+    assert nil == Indexed.get(index, :cars, 1)
+
+    Indexed.warm(index, cars: [data: {:asc, :make, @cars}])
+
+    assert %Car{id: 1, make: "Lamborghini"} == Indexed.get(index, :cars, 1)
+  end
 end
