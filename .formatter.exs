@@ -1,4 +1,4 @@
-locals_without_parens = [managed: 2, managed: 3]
+locals_without_parens = [managed: 1, managed: 2, managed: 3]
 
 [
   import_deps: [:ecto],

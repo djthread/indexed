@@ -166,14 +166,14 @@ defmodule IndexedViewsTest do
 
     refute Map.has_key?(get_index(index, views_key(:albums)), fingerprint)
 
-    should_be_nil = [
+    should_be_empty = [
       get_index(index, :albums, fingerprint, :artist),
       get_index(index, :albums, fingerprint, {:desc, :artist}),
-      get_index(index, uniques_map_key(:albums, fingerprint, :id)),
-      get_index(index, uniques_list_key(:albums, fingerprint, :field_name))
+      get_index(index, uniques_map_key(:albums, fingerprint, :id), []),
+      get_index(index, uniques_list_key(:albums, fingerprint, :field_name), [])
     ]
 
-    assert Enum.all?(should_be_nil, &is_nil/1)
+    assert Enum.all?(should_be_empty, &Enum.empty?/1)
 
     # Records are still there.
     assert %{artist: "London Elektricity"} = get(index, :albums, 3)

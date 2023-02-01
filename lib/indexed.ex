@@ -59,6 +59,7 @@ defmodule Indexed do
 
   @typedoc """
   A lookup index allows quickly finding record ids by their field values.
+  These are leveraged with with the "get_by" functions.
   """
   @type lookup :: %{any => [id]}
 
@@ -88,25 +89,15 @@ defmodule Indexed do
     end
   end
 
+  @doc "Gets the list of `name` records having `value` under `field`."
   @spec get_by(t, atom, atom, any) :: [record]
-  def get_by(index, name, field, value) do
-    index
-    |> get_lookup(name, field)
-    |> Map.get(value, [])
-    |> Enum.map(&get(index, name, &1))
-  end
+  def get_by(index, name, field, value),
+    do: index |> get_ids_by(name, field, value) |> Enum.map(&get(index, name, &1))
 
-  @spec lookup_ids(t, atom, atom, any) :: [id]
-  def lookup_ids(index, name, field, value) do
-    index |> get_lookup(name, field) |> Map.get(value, [])
-  end
-
-  @spec lookup(t, atom, atom, any) :: [record]
-  def lookup(index, name, field, value) do
-    index
-    |> lookup_ids(name, field, value)
-    |> Enum.map(&get(index, name, &1))
-  end
+  @doc "Gets the list of `name` record ids having `value` under `field`."
+  @spec get_ids_by(t, atom, atom, any) :: [id]
+  def get_ids_by(index, name, field, value),
+    do: index |> get_lookup(name, field) |> Map.get(value, [])
 
   @doc "Build an ETS table name from its namespace and entity_name."
   @spec table_name(namespace | nil, atom) :: atom
@@ -116,15 +107,16 @@ defmodule Indexed do
   def table_name(namespace, nil), do: :"#{namespace}"
   def table_name(namespace, entity_name), do: :"#{namespace}:#{entity_name}"
 
-  @doc "Get an index data structure."
-  @spec get_index(t, atom, prefilter, order_hint | nil) :: list | map | nil
+  @doc "Gets a list of record ids."
+  @spec get_index(t, atom, prefilter, order_hint | nil) :: list
   def get_index(index, entity_name, prefilter, order_hint) when is_atom(entity_name) do
     order_hint = order_hint || default_order_hint(index, entity_name)
-    get_index(index, index_key(entity_name, prefilter, order_hint))
+    get_index(index, index_key(entity_name, prefilter, order_hint), [])
   end
 
-  @doc "Get an index data structure by key."
-  # TODO do i need to accept a module here?
+  @doc """
+  Gets an index data structure by key. Returns default if cache doesn't exist.
+  """
   @spec get_index(t, String.t(), any) :: any
   def get_index(index, index_key, default \\ nil) do
     case :ets.lookup(ref(index), index_key) do
@@ -133,14 +125,14 @@ defmodule Indexed do
     end
   end
 
-  @doc "Get an index data structure."
+  @doc "Gets an index data structure."
   @spec get_lookup(t, atom, atom) :: lookup | nil
   def get_lookup(index, entity_name, field_name) do
     get_index(index, lookup_key(entity_name, field_name))
   end
 
   @doc """
-  Get an ETS table reference or name for an entity name.
+  Gets an ETS table reference or name for an entity name.
   Default with no `entity_name` is indexes table ref.
   """
   @spec ref(t, atom) :: table_ref
@@ -158,7 +150,7 @@ defmodule Indexed do
   """
   @spec get_uniques_list(t, atom, prefilter, atom) :: list
   def get_uniques_list(index, entity_name, prefilter, field_name) do
-    get_index(index, uniques_list_key(entity_name, prefilter, field_name)) || []
+    get_index(index, uniques_list_key(entity_name, prefilter, field_name), [])
   end
 
   @doc """
@@ -185,9 +177,10 @@ defmodule Indexed do
     end
 
     order_hint = order_hint || default_order_hint.()
-    cached_list = get_index(index, entity_name, prefilter, order_hint)
 
-    Enum.map(cached_list || [], &get(index, entity_name, &1))
+    index
+    |> get_index(entity_name, prefilter, order_hint)
+    |> Enum.map(&get(index, entity_name, &1))
   end
 
   @doc "Cache key for a given entity, field and direction."
@@ -231,7 +224,7 @@ defmodule Indexed do
   @doc "Get a map of fingerprints to view structs (view metadata)."
   @spec get_views(t, atom) :: %{View.fingerprint() => View.t()}
   def get_views(index, entity_name) do
-    get_index(index, views_key(entity_name)) || %{}
+    get_index(index, views_key(entity_name), %{})
   end
 
   @doc "Get a particular view struct (view metadata) by its fingerprint."
@@ -256,5 +249,12 @@ defmodule Indexed do
   def default_order_hint(index, entity_name) do
     k = &Access.key(&1)
     index |> get_in([k.(:entities), entity_name, k.(:fields)]) |> hd() |> elem(0)
+  end
+
+  @doc "Delete all ETS tables associated with the given index."
+  @spec delete_tables(t) :: :ok
+  def delete_tables(index) do
+    :ets.delete(index.index_ref)
+    Enum.each(index.entities, fn {_name, e} -> :ets.delete(e.ref) end)
   end
 end

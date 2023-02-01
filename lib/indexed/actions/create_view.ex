@@ -44,7 +44,7 @@ defmodule Indexed.Actions.CreateView do
 
     with false <- Map.has_key?(views, fingerprint),
          ids when is_list(ids) <-
-           Indexed.get_index(index, entity_name, prefilter, {:asc, order_field}) || [] do
+           Indexed.get_index(index, entity_name, prefilter, {:asc, order_field}) do
       {view_ids, counts_map_map} = gather_records_and_uniques(index, entity_name, ids, opts)
       save_uniques(index, entity_name, fingerprint, counts_map_map, opts)
       save_indexes(index, entity_name, entity, fingerprint, view_ids, order_field)

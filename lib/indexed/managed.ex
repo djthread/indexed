@@ -132,7 +132,7 @@ defmodule Indexed.Managed do
     recursively.
   - `fields` : Used to build the index. See `Managed.Entity.t/0`.
   - `id_key` : Used to get a record id. See `Managed.Entity.t/0`.
-  - `lookups` : See `t:Managed.Entity.t/0`.
+  - `lookups` : See `t:Managed.Entity.t/0`. Use these with "get_by" functions.
   - `query` : Optional function which takes a queryable and returns a
     queryable. This allows for extra query logic to be added such as populating
     virtual fields. Invoked by `manage/5` when the association is needed.
@@ -219,16 +219,16 @@ defmodule Indexed.Managed do
   """
   @type preloads_option :: preloads | true
 
-  @typep add_or_rm :: :add | :rm
-  @typep id :: Indexed.id()
-  @typep id_key :: atom | (record -> id)
-  @typep managed_or_name :: t | atom
-  @typep order_hint :: Indexed.order_hint()
-  @typep prefilter :: Indexed.prefilter()
-  @typep preloads :: atom | list
-  @typep record :: Indexed.record()
-  @typep record_or_list :: [record] | record | nil
-  @typep state :: State.t()
+  @type add_or_rm :: :add | :rm
+  @type id :: Indexed.id()
+  @type id_key :: atom | (record -> id)
+  @type managed_or_name :: t | atom
+  @type order_hint :: Indexed.order_hint()
+  @type prefilter :: Indexed.prefilter()
+  @type preloads :: atom | list
+  @type record :: Indexed.record()
+  @type record_or_list :: [record] | record | nil
+  @type state :: State.t()
 
   defmacro __using__(opts) do
     repo = opts[:repo]
@@ -268,19 +268,37 @@ defmodule Indexed.Managed do
       # These functions are excluded from the import above and these shortcut
       # versions are attached instead, auto-passing the module name.
       if unquote(ns) do
-        @doc "Get a record by id from a namespaced index. See `Indexed.Managed.get/4`."
+        @doc """
+        Get a record by id from a namespaced index.
+        See `Indexed.Managed.get/4`."
+        """
         @spec get(atom, Indexed.id(), Managed.preloads_option()) :: any
         def get(name, id, preloads \\ nil), do: Managed.get(__MODULE__, name, id, preloads)
 
-        @doc "Get a record from a namespaced index. See `Indexed.Managed.get_by/5`."
+        @doc """
+        Get records where `field` has `value`. See `Indexed.Managed.get_by/5`."
+        """
         @spec get_by(atom, atom, any, Managed.preloads_option()) :: [Indexed.record()]
         def get_by(name, field, value, preloads \\ nil),
           do: Managed.get_by(__MODULE__, name, field, value, preloads)
 
+        @doc """
+        Get record ids where `field` has `value`.
+        See `Indexed.Managed.get_ids_by/5`."
+        """
+        @spec get_ids_by(atom, atom, any) :: [Indexed.record()]
+        def get_ids_by(name, field, value),
+          do: Managed.get_ids_by(__MODULE__, name, field, value)
+
+        @doc "Invoke `Indexed.get_lookup/3` with a wrapped state for convenience."
+        @spec get_lookup(atom, atom) :: Indexed.lookup() | nil
+        def get_lookup(name, field),
+          do: Managed.get_lookup(__MODULE__, name, field)
+
         @doc "Get a uniques list. See `Indexed.Managed.get_uniques_list/4`."
         @spec get_uniques_list(atom, Indexed.prefilter(), atom) :: list | nil
-        def get_uniques_list(name, prefilter \\ nil, field_name),
-          do: Managed.get_uniques_list(__MODULE__, name, prefilter, field_name)
+        def get_uniques_list(name, prefilter \\ nil, field),
+          do: Managed.get_uniques_list(__MODULE__, name, prefilter, field)
 
         @doc "Get a list of records. See `Indexed.Managed.get_records/4`."
         @spec get_records(atom, Indexed.prefilter(), Indexed.order_hint() | nil) ::
@@ -931,6 +949,10 @@ defmodule Indexed.Managed do
     end)
   end
 
+  @spec get_ids_by(state_or_module, atom, atom, any) :: [record]
+  def get_ids_by(som, name, field, value),
+    do: with_index(som, &Indexed.get_by(&1, name, field, value))
+
   @spec do_preload(record | [record] | nil, state_or_module, preloads_option, atom) ::
           record | [record] | nil
   defp do_preload(record_or_list, som, preloads, name) do
@@ -971,16 +993,16 @@ defmodule Indexed.Managed do
   end
 
   @doc "Invoke `Indexed.get_index/4` with a wrapped state for convenience."
-  @spec get_index(state_or_module, atom, prefilter) :: list | map | nil
+  @spec get_index(state_or_module, atom, prefilter) :: list
   def get_index(som, name, prefilter \\ nil, order_hint \\ nil) do
     with_index(som, &Indexed.get_index(&1, name, prefilter, order_hint))
   end
 
   @doc "Invoke `Indexed.get_lookup/3` with a wrapped state for convenience."
   @spec get_lookup(state_or_module, atom, atom) :: Indexed.lookup() | nil
-  def get_lookup(som, name, field_name) do
+  def get_lookup(som, name, field) do
     with_index(som, fn index ->
-      Indexed.get_lookup(index, name, field_name)
+      Indexed.get_lookup(index, name, field)
     end)
   end
 
@@ -996,18 +1018,18 @@ defmodule Indexed.Managed do
 
   @doc "Invoke `Indexed.get_uniques_list/4`."
   @spec get_uniques_list(state_or_module, atom, prefilter, atom) :: list | nil
-  def get_uniques_list(som, name, prefilter \\ nil, field_name) do
+  def get_uniques_list(som, name, prefilter \\ nil, field) do
     with_index(som, fn index ->
-      Indexed.get_uniques_list(index, name, prefilter, field_name)
+      Indexed.get_uniques_list(index, name, prefilter, field)
     end)
   end
 
   @doc "Invoke `Indexed.get_uniques_map/4`."
   @spec get_uniques_map(state_or_wrapped, atom, prefilter, atom) ::
           Indexed.UniquesBundle.counts_map() | nil
-  def get_uniques_map(state, name, prefilter \\ nil, field_name) do
+  def get_uniques_map(state, name, prefilter \\ nil, field) do
     with_state(state, fn %{index: index} ->
-      Indexed.get_uniques_map(index, name, prefilter, field_name)
+      Indexed.get_uniques_map(index, name, prefilter, field)
     end)
   end
 

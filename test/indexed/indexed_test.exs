@@ -89,7 +89,7 @@ defmodule IndexedTest do
     end
 
     test "raise on no such index", %{index: index} do
-      assert is_nil(Indexed.get_index(index, :cars, nil, {:desc, :whoops}))
+      assert [] == Indexed.get_index(index, :cars, nil, {:desc, :whoops})
     end
   end
 
@@ -119,7 +119,8 @@ defmodule IndexedTest do
     end
 
     test "no such index", %{index: index} do
-      assert is_nil(Indexed.paginate(index, :what, limit: 2, order_by: :lol))
+      assert %Paginator.Page{entries: []} =
+               Indexed.paginate(index, :what, limit: 2, order_by: :lol)
     end
   end
 
@@ -263,16 +264,16 @@ defmodule IndexedTest do
   end
 
   test "lookup", %{index: index} do
-    assert [2] = Indexed.lookup_ids(index, :cars, :make, "Mazda")
-    assert [%{id: 2}] = Indexed.lookup(index, :cars, :make, "Mazda")
+    assert [2] = Indexed.get_ids_by(index, :cars, :make, "Mazda")
+    assert [%{id: 2}] = Indexed.get_by(index, :cars, :make, "Mazda")
 
     Indexed.put(index, :cars, %Car{id: 3, make: "Mazda"})
 
-    assert [%{id: 3}, %{id: 2}] = Indexed.lookup(index, :cars, :make, "Mazda")
+    assert [%{id: 3}, %{id: 2}] = Indexed.get_by(index, :cars, :make, "Mazda")
 
     :ok = Indexed.drop(index, :cars, 2)
 
-    assert [%{id: 3}] = Indexed.lookup(index, :cars, :make, "Mazda")
+    assert [%{id: 3}] = Indexed.get_by(index, :cars, :make, "Mazda")
   end
 
   test "prewarm" do

@@ -6,6 +6,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic
 Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0] - 2023-02-01
+
+### Added
+- `Indexed.delete_tables/1` to delete all ETS tables.
+  Useful when indexing from scratch is needed.
+- `MyManagedMod.{get_ids_by, get_lookup}`
+
+### Changed
+- `Indexed.get_index/4` (and `Indexed.Managed.get_index/4`) now always
+  return a list. (They used to return nil if there was no index.)
+
+### Removed
+
+- `Indexed.lookup` - Use `Indexed.get_by/4` instead.
 
 ## [0.2.0] - 2022-12-16
 
