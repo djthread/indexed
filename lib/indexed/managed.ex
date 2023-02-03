@@ -1045,7 +1045,10 @@ defmodule Indexed.Managed do
     @doc "List `name` records using the Paginator interface."
     @spec paginate(state_or_module, atom, keyword) :: Paginator.Page.t() | nil
     def paginate(som, name, params) do
-      with_index(som, &Indexed.paginate(&1, name, params))
+      with_index(som, fn index, mod ->
+        params = Keyword.put(params, :id_key, mod.__managed__(name).id_key)
+        Indexed.paginate(index, name, params)
+      end)
     end
   end
 

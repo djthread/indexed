@@ -12,6 +12,8 @@ if Code.ensure_loaded?(Paginator) do
     import Paginator, only: [cursor_for_record: 2]
     alias Paginator.{Config, Cursor, Page, Page.Metadata}
 
+    @default_id_key :id
+
     @typep record :: struct
     @typep id :: any
 
@@ -37,29 +39,29 @@ if Code.ensure_loaded?(Paginator) do
       * `:filter` - An optional function which takes a record and returns a
         boolean, true if the record is desired in pagination. Default is `nil`
         where all records (in the selected prefilter) will be included.
+      * `:id_key` - Atom key for primary identifier. Default `:id`.
       * `:prefilter` - Two-element tuple, indicating the field name and value for
         the prefiltered index to be used. Default is `nil`, indicating that the
         index with the non-prefiltered, full list of records should be used.
       * `:prepare` - An optional function which takes a record and returns a new
         record to use -- both for the filter function and in the result.
-
-      # * `:fetch_cursor_value_fun` function of arity 2 to lookup cursor values on returned records.
-      # Defaults to `Paginator.default_fetch_cursor_value/2`
-      # * `:include_total_count` - Set this to true to return the total number of
-      # records matching the query. Note that this number will be capped by
-      # `:total_count_limit`. Defaults to `false`.
-      # * `:total_count_primary_key_field` - Running count queries on specified column of the table
-      # * `:limit` - Limits the number of records returned per page. Note that this
-      # number will be capped by `:maximum_limit`. Defaults to `50`.
-      # * `:maximum_limit` - Sets a maximum cap for `:limit`. This option can be useful when `:limit`
-      # is set dynamically (e.g from a URL param set by a user) but you still want to
-      # enfore a maximum. Defaults to `500`.
-      # * `:sort_direction` - The direction used for sorting. Defaults to `:asc`.
-      # It is preferred to set the sorting direction per field in `:cursor_fields`.
-      # * `:total_count_limit` - Running count queries on tables with a large number
-      # of records is expensive so it is capped by default. Can be set to `:infinity`
-      # in order to count all the records. Defaults to `10,000`.
     """
+    # * `:fetch_cursor_value_fun` function of arity 2 to lookup cursor values on returned records.
+    # Defaults to `Paginator.default_fetch_cursor_value/2`
+    # * `:include_total_count` - Set this to true to return the total number of
+    # records matching the query. Note that this number will be capped by
+    # `:total_count_limit`. Defaults to `false`.
+    # * `:total_count_primary_key_field` - Running count queries on specified column of the table
+    # * `:limit` - Limits the number of records returned per page. Note that this
+    # number will be capped by `:maximum_limit`. Defaults to `50`.
+    # * `:maximum_limit` - Sets a maximum cap for `:limit`. This option can be useful when `:limit`
+    # is set dynamically (e.g from a URL param set by a user) but you still want to
+    # enfore a maximum. Defaults to `500`.
+    # * `:sort_direction` - The direction used for sorting. Defaults to `:asc`.
+    # It is preferred to set the sorting direction per field in `:cursor_fields`.
+    # * `:total_count_limit` - Running count queries on tables with a large number
+    # of records is expensive so it is capped by default. Can be set to `:infinity`
+    # in order to count all the records. Defaults to `10,000`.
     @spec run(Indexed.t(), atom, keyword) :: Paginator.Page.t() | nil
     def run(index, entity_name, params) do
       order_hint =
@@ -68,8 +70,10 @@ if Code.ensure_loaded?(Paginator) do
           else: raise(":order_by required")
 
       pf = params[:prefilter]
+      id_key = params[:id_key] || @default_id_key
+      is_atom(id_key) || raise "id_key must be an atom."
 
-      cursor_fields = Enum.map(order_hint ++ [asc: :id], fn {dir, field} -> {field, dir} end)
+      cursor_fields = Enum.map(order_hint ++ [asc: id_key], fn {dir, field} -> {field, dir} end)
 
       with ordered_ids when is_list(ordered_ids) <-
              Indexed.get_index(index, entity_name, pf, order_hint) do
@@ -81,10 +85,15 @@ if Code.ensure_loaded?(Paginator) do
           end
         end
 
-        paginator_opts =
-          Keyword.merge(params, cursor_fields: cursor_fields, filter: params[:filter])
-
-        paginate(ordered_ids, getter, paginator_opts)
+        paginate(
+          ordered_ids,
+          getter,
+          Keyword.merge(params,
+            cursor_fields: cursor_fields,
+            filter: params[:filter],
+            id_key: id_key
+          )
+        )
       end
     end
 
@@ -94,22 +103,23 @@ if Code.ensure_loaded?(Paginator) do
     """
     @spec paginate([id], fun, keyword) :: Page.t()
     def paginate(ordered_ids, record_getter, opts \\ []) when is_list(ordered_ids) do
+      id_key = opts[:id_key] || @default_id_key
       filter = opts[:filter]
       config = Config.new(Keyword.merge(@config, opts))
 
       Config.validate!(config)
 
-      cursor_after_in = opts[:after] && Cursor.decode(opts[:after])
-      cursor_before_in = opts[:before] && Cursor.decode(opts[:before])
+      cursor_after_in = if a = opts[:after], do: Cursor.decode(a)
+      cursor_before_in = if b = opts[:before], do: Cursor.decode(b)
 
       {records, _count, cursor_before, cursor_after} =
         cond do
           cursor_before_in ->
-            cursor_id = cursor_before_in[:id]
+            cursor_id = cursor_before_in[id_key]
             collect_before(record_getter, ordered_ids, config, filter, cursor_id)
 
           cursor_after_in ->
-            cursor_id = cursor_after_in[:id]
+            cursor_id = cursor_after_in[id_key]
             collect_after(record_getter, ordered_ids, config, filter, cursor_id)
 
           true ->
