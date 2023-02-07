@@ -3,6 +3,9 @@ defmodule Indexed.Managed.Helpers do
   alias Ecto.Association.NotLoaded
   alias Indexed.Managed, as: M
 
+  @typedoc "A 1 or 2-arity function passed to `with_index/2`."
+  @type with_index_fun :: (Indexed.t() -> any) | (Indexed.t(), module -> any)
+
   @typep assoc_spec :: M.assoc_spec()
   @typep id :: Indexed.id()
   @typep record :: Indexed.record()
@@ -24,7 +27,7 @@ defmodule Indexed.Managed.Helpers do
   Given state, wrapped state, or a module, invoke `fun` with the
   `t:Indexed.t/0`. If a module is given, use the index from its `__index__/0`.
   """
-  @spec with_index(M.state_or_module(), (Indexed.t() -> any)) :: any
+  @spec with_index(M.state_or_module(), with_index_fun) :: any
   def with_index(%{managed: state} = som, fun),
     do: %{som | managed: with_index(state, fun)}
 
