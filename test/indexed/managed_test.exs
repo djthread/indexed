@@ -87,14 +87,19 @@ defmodule Indexed.ManagedTest do
              }
            ] = entries()
 
-    assert [%{name: "fred"}, %{name: "jill"}, %{name: "lee"}, %{name: "lucy"}] = records(:users)
+    has? = fn recs, names, length ->
+      Enum.all?(names, fn n -> Enum.any?(recs, &(&1.name == n)) end) and length == length(recs)
+    end
+
+    assert has?.(records(:users), ~w(fred jill lee lucy), 4)
+
     assert %{^bob_id => 5, ^jill_id => 2, ^lee_id => 1, ^lucy_id => 1} = tracking(bs_pid, :users)
 
     {:ok, _} = Blog.delete_comment(comment_id)
 
     msg = "user-#{jill_id}"
     assert_receive [:unsubscribe, ^msg]
-    assert [%{name: "fred"}, %{name: "lee"}, %{name: "lucy"}] = records(:users)
+    assert has?.(records(:users), ~w(fred lee lucy), 3)
     assert %{bob_id => 5, lee_id => 2, lucy_id => 1} == tracking(bs_pid, :users)
     assert [%{comments: [%{content: "woah"}]}, %{comments: [_, _]}] = entries()
 

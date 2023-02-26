@@ -3,7 +3,6 @@ defmodule Indexed.Actions.Warm do
   import Indexed.Helpers, only: [add_to_lookup: 4, id: 2]
   alias Indexed.{Entity, UniquesBundle}
   alias __MODULE__
-  require Logger
 
   defstruct [:data_tuple, :entity_name, :id_key, :index_ref]
 
@@ -55,9 +54,10 @@ defmodule Indexed.Actions.Warm do
   as keys and keyword lists of options are values. Allowed options are as
   follows:
 
-  * `:fields` - List of field name atoms to index by. At least one required.
+  * `:fields` - List of field name atoms to index by.
     * If field is a DateTime, use sort: `{:my_field, sort: :datetime}`.
     * Ascending and descending will be indexed for each field.
+    * If none, sorted results will not be available.
   * `:id_key` - Primary key to use in indexes and for accessing the records of
     this entity.  See `t:Indexed.Entity.t/0`. Default: `:id`.
   * `:lookups` - See `t:Indexed.Entity.t/0`.
@@ -145,13 +145,11 @@ defmodule Indexed.Actions.Warm do
         index_ref: index.index_ref
       }
 
-      Logger.debug("Warming #{entity_name}...")
-
       # Create and insert the caches for this entity: for each prefilter
       # configured, build & store indexes for each indexed field.
-      # Internally, a `t:prefilter/0` refers to a `{:my_field, "possible
-      # value"}` tuple or `nil` which we implicitly include, where no
-      # prefilter is applied.
+      # Internally, a `t:prefilter/0` refers to a `{:my_field, "some value"}`
+      # tuple or `nil` which we implicitly include,
+      # where no prefilter is applied.
       for prefilter_config <- entity.prefilters,
           do: warm_prefilter(warm, prefilter_config, entity.fields)
 
@@ -190,11 +188,6 @@ defmodule Indexed.Actions.Warm do
       warm_sorted(warm, prefilter, field, data_tuple)
     end
 
-    Logger.debug("""
-      * Putting index (PF #{pf_key || "nil"}) for \
-    #{inspect(Enum.map(fields, &elem(&1, 0)))}\
-    """)
-
     if nil == pf_key do
       Enum.each(fields, &warm_sorted.(nil, &1, full_data))
 
@@ -215,8 +208,6 @@ defmodule Indexed.Actions.Warm do
 
       bundle = UniquesBundle.new(counts_map, Enum.sort(Enum.uniq(list)))
       UniquesBundle.put(bundle, index_ref, entity_name, nil, pf_key, new?: true)
-
-      Logger.debug("--> Putting UB (for #{pf_key}) with #{map_size(counts_map)} elements.")
 
       # For each value found for the prefilter, create a set of indexes.
       Enum.each(grouped, fn {pf_val, data} ->
@@ -276,21 +267,14 @@ defmodule Indexed.Actions.Warm do
       list = counts_map |> Map.keys() |> Enum.sort()
       bundle = UniquesBundle.new(counts_map, list)
 
-      Logger.debug("""
-      --> Putting UB (PF #{inspect(prefilter)}, #{field_name}) \
-      with #{map_size(counts_map)} elements."\
-      """)
-
       UniquesBundle.put(bundle, index_ref, entity_name, prefilter, field_name, new?: true)
     end)
   end
 
   @doc "Normalize fields."
-  @spec resolve_fields_opt([atom | Entity.field()], atom) :: [Entity.field()]
+  @spec resolve_fields_opt([atom | Entity.field()] | nil, atom) :: [Entity.field()]
   def resolve_fields_opt(fields, _entity_name) do
-    # match?([_ | _], fields) || raise "At least one field to index is required on #{entity_name}."
-
-    Enum.map(fields, fn
+    Enum.map(List.wrap(fields), fn
       {_name, _opts} = f -> f
       name when is_atom(name) -> {name, []}
     end)

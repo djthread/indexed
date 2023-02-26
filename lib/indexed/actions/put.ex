@@ -3,19 +3,18 @@ defmodule Indexed.Actions.Put do
   import Indexed.Helpers, only: [add_to_lookup: 4, id: 1]
   alias Indexed.{Entity, UniquesBundle, View}
   alias __MODULE__
-  require Logger
 
   defstruct [:current_view, :entity_name, :index, :previous, :pubsub, :record]
 
   @typedoc """
-  * `:current_view` - View struct currently being updated.
-  * `:entity_name` - Entity name being operated on.
-  * `:index` - See `t:Indexed.t/0`.
-  * `:previous` - The previous version of the record. `nil` if none.
-  * `:pubsub` - If configured, a Phoenix.PubSub module to send view updates.
-  * `:record` - The new record being added in the put operation.
+  - `current_view` : View struct currently being updated.
+  - `entity_name` : Entity name being operated on.
+  - `index` : See `t:Indexed.t/0`.
+  - `previous` : The previous version of the record. `nil` if none.
+  - `pubsub` : If configured, a Phoenix.PubSub module to send view updates.
+  - `record` : The new record being added in the put operation.
   """
-  @type t :: %__MODULE__{
+  @type t :: %Put{
           current_view: View.t() | nil,
           entity_name: atom,
           index: Indexed.t(),
@@ -48,8 +47,6 @@ defmodule Indexed.Actions.Put do
   end
 
   defp do_run(%{entity_name: name, index: index} = put, id) do
-    Logger.debug("Putting into #{put.entity_name}: id #{id}")
-
     %{fields: fields, lookups: lookups, prefilters: prefilters, ref: ref} =
       Map.fetch!(index.entities, name)
 
@@ -63,8 +60,6 @@ defmodule Indexed.Actions.Put do
         update_all_uniques(put, pf_opts[:maintain_unique] || [], nil, false)
 
       {pf_key, pf_opts} ->
-        Logger.debug("--> Getting UB for #{name} prefilter nil, field: #{pf_key}")
-
         handle_prefilter_value = fn pnb, value, new_value? ->
           prefilter = {pf_key, value}
           update_index_for_fields(put, prefilter, fields, new_value?)
@@ -199,8 +194,6 @@ defmodule Indexed.Actions.Put do
     %{previous: previous, record: record} = put
 
     Enum.each(fields, fn {field_name, _} = field ->
-      Logger.debug("--> Updating index for PF #{inspect(prefilter)}, field: #{field_name}")
-
       this_under_pf = under_prefilter?(put, record, prefilter)
       prev_under_pf = previous && under_prefilter?(put, previous, prefilter)
       record_value = Map.get(record, field_name)

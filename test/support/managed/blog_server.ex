@@ -21,9 +21,9 @@ defmodule BlogServer do
     fields: [:inserted_at],
     manage_path: [author: :flare_pieces]
 
+  # No fields declared: Unsorted mode!
   managed :users, User,
     children: [:best_friend, :flare_pieces],
-    indexes: [:name],
     prefilters: [:name],
     subscribe: &Blog.subscribe_to_user/1,
     unsubscribe: &Blog.unsubscribe_from_user/1

@@ -285,4 +285,19 @@ defmodule IndexedTest do
 
     assert %Car{id: 1, make: "Lamborghini"} == Indexed.get(index, :cars, 1)
   end
+
+  test "unsorted mode" do
+    index = Indexed.warm(cars: [data: @cars])
+
+    has? = fn makes ->
+      recs = Indexed.get_records(index, :cars)
+      Enum.all?(makes, fn m -> Enum.any?(recs, &(&1.make == m)) end)
+    end
+
+    assert has?.(~w(Lamborghini Mazda))
+
+    Indexed.put(index, :cars, %Car{id: 3, make: "Batmobile"})
+
+    assert has?.(~w(Lamborghini Mazda Batmobile))
+  end
 end
