@@ -8,7 +8,7 @@ defmodule Indexed do
   @moduledoc """
   Tools for creating an index.
   """
-  alias Indexed.View
+  alias Indexed.{Entity, View}
   alias __MODULE__
 
   # Baseline opts. Others such as :named_table may be added.
@@ -21,7 +21,7 @@ defmodule Indexed do
   * `:index_ref` - ETS table reference for all indexed data.
   """
   @type t :: %Indexed{
-          entities: %{atom => Indexed.Entity.t()},
+          entities: %{atom => Entity.t()},
           index_ref: table_ref
         }
 
@@ -83,7 +83,7 @@ defmodule Indexed do
   @doc "Get a record by id from the index."
   @spec get(t, atom, id, any) :: any
   def get(index, entity_name, id, default \\ nil) do
-    case :ets.lookup(Map.fetch!(index.entities, entity_name).ref, id) do
+    case :ets.lookup(ref(index, entity_name), id) do
       [{_, val}] -> val
       [] -> default
     end
@@ -170,17 +170,17 @@ defmodule Indexed do
   sub-section of the data should be queried. Default is `nil` - no prefilter.
   """
   @spec get_records(t, atom, prefilter, order_hint | nil) :: [record]
-  def get_records(index, entity_name, prefilter, order_hint \\ nil) do
-    default_order_hint = fn ->
-      path = [Access.key(:entities), entity_name, Access.key(:fields)]
-      index |> get_in(path) |> hd() |> elem(0)
+  def get_records(index, entity_name, prefilter \\ nil, order_hint \\ nil) do
+    if ord = order_hint || default_order_hint(index, entity_name) do
+      index
+      |> get_index(entity_name, prefilter, ord)
+      |> Enum.map(&get(index, entity_name, &1))
+    else
+      index
+      |> ref(entity_name)
+      |> :ets.tab2list()
+      |> Enum.map(&elem(&1, 1))
     end
-
-    order_hint = order_hint || default_order_hint.()
-
-    index
-    |> get_index(entity_name, prefilter, order_hint)
-    |> Enum.map(&get(index, entity_name, &1))
   end
 
   @doc "Cache key for a given entity, field and direction."
@@ -243,12 +243,17 @@ defmodule Indexed do
 
   @doc """
   Get the name of the first indexed field for an entity.
+  If none, return `nil`, meaning there are no ordering indexes.
   Good order_hint default.
   """
   @spec default_order_hint(t, atom) :: atom
   def default_order_hint(index, entity_name) do
-    k = &Access.key(&1)
-    index |> get_in([k.(:entities), entity_name, k.(:fields)]) |> hd() |> elem(0)
+    path = [Access.key(:entities), entity_name, Access.key(:fields)]
+
+    case get_in(index, path) do
+      [{name, _} | _] -> name
+      _ -> nil
+    end
   end
 
   @doc "Delete all ETS tables associated with the given index."

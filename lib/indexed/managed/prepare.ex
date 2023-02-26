@@ -22,7 +22,6 @@ defmodule Indexed.Managed.Prepare do
     manageds
     |> map_put.(:children, &do_rewrite_children/2)
     |> map_put.(:prefilters, &do_rewrite_prefilters/2)
-    |> map_put.(:fields, &do_rewrite_fields/2)
     |> map_put.(:tracked, &do_rewrite_tracked/2)
   end
 
@@ -83,16 +82,6 @@ defmodule Indexed.Managed.Prepare do
       do: prefilters,
       else: finish.(required)
   end
-
-  # If :fields is empty, use the id key or the first field given by Ecto.
-  @spec do_rewrite_fields(Managed.t(), [Managed.t()]) :: [atom | Entity.field()]
-  defp do_rewrite_fields(%{fields: [], id_key: id_key}, _) when is_atom(id_key),
-    do: [id_key]
-
-  defp do_rewrite_fields(%{fields: [], module: mod}, _),
-    do: [hd(mod.__schema__(:fields))]
-
-  defp do_rewrite_fields(%{fields: fields}, _), do: fields
 
   # Return true for tracked if another entity has a :one association to us.
   @spec do_rewrite_tracked(Managed.t(), [Managed.t()]) :: boolean

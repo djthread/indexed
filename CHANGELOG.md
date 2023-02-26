@@ -6,6 +6,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic
 Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0] - 2023-02-27
+
+### Changed
+- `fields` list was optional, but the behavior when none declared has changed.
+  - Before, the `id_key` (default `:id`) was automatically used in the
+    background. This meant that presorted indexes (ascending and descending)
+    were auto-maintained and used as the default when calling `get_records` etc. 
+  - Now, no such presorted indexes will be maintained. When querying,
+    `:ets.tab_to_list/2` will be used, with no particular order being promised.
+
+## [0.3.3] - 2023-02-07
+
+### Changed
+- Minor dialyzer fix.
+
 ## [0.3.2] - 2023-02-03
 
 ### Added
