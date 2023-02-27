@@ -9,7 +9,6 @@ defmodule Indexed.UniquesBundle do
   of these values.
   """
   alias __MODULE__
-  require Logger
 
   @typedoc """
   A 3-element tuple defines unique values under a prefilter:
@@ -66,11 +65,6 @@ defmodule Indexed.UniquesBundle do
     map = Indexed.get_uniques_map(index, entity_name, prefilter, field_name)
     list = Indexed.get_uniques_list(index, entity_name, prefilter, field_name)
 
-    Logger.debug(fn ->
-      key = Indexed.uniques_map_key(entity_name, prefilter, field_name)
-      "UB: Getting #{key}: #{inspect(map)}"
-    end)
-
     {map, list, [], false}
   end
 
@@ -121,8 +115,6 @@ defmodule Indexed.UniquesBundle do
     field_pf? = is_tuple(prefilter)
 
     if not new? and field_pf? and Enum.empty?(list) do
-      Logger.debug("UB: Dropping #{counts_key}")
-
       # This prefilter has ran out of records -- delete the ETS table.
       # Note that for views (binary prefilter) and the global prefilter (nil)
       # we allow the uniques to remain in the empty state. They go when the
@@ -130,8 +122,6 @@ defmodule Indexed.UniquesBundle do
       :ets.delete(index_ref, list_key)
       :ets.delete(index_ref, counts_key)
     else
-      Logger.debug("UB: Putting #{counts_key}: #{inspect(counts_map)}")
-
       if new? or list_updated?,
         do: :ets.insert(index_ref, {list_key, list}),
         else: list

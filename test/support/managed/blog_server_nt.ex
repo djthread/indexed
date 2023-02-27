@@ -26,6 +26,7 @@ defmodule BlogServerNT do
     manage_path: [author: :flare_pieces]
 
   managed :users, User,
+    fields: [:id],
     children: [:best_friend, :flare_pieces],
     prefilters: [:name],
     lookups: [:name],

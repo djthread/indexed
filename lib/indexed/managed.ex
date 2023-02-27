@@ -146,7 +146,7 @@ defmodule Indexed.Managed do
   """
   @type t :: %Managed{
           children: children,
-          fields: [atom | Entity.field()],
+          fields: [atom | Entity.field()] | nil,
           id_key: id_key,
           lookups: [Entity.field_name()],
           query: (Ecto.Queryable.t() -> Ecto.Queryable.t()) | nil,

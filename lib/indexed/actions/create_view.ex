@@ -4,7 +4,6 @@ defmodule Indexed.Actions.CreateView do
   """
   alias Indexed.Actions.Warm
   alias Indexed.View
-  require Logger
 
   @typep id :: any
 
@@ -29,8 +28,6 @@ defmodule Indexed.Actions.CreateView do
   """
   @spec run(Indexed.t(), atom, View.fingerprint(), keyword) :: {:ok, View.t()} | :error
   def run(index, entity_name, fingerprint, opts \\ []) do
-    Logger.debug("Creating #{entity_name} view: #{fingerprint}")
-
     entity = Map.fetch!(index.entities, entity_name)
     prefilter = opts[:prefilter]
 
@@ -113,8 +110,6 @@ defmodule Indexed.Actions.CreateView do
       map_key = Indexed.uniques_map_key(entity_name, fingerprint, field_name)
       list_key = Indexed.uniques_list_key(entity_name, fingerprint, field_name)
 
-      Logger.debug("  * Saving #{field_name} uniques with #{map_size(counts_map)} values.")
-
       :ets.insert(index.index_ref, {map_key, counts_map})
       :ets.insert(index.index_ref, {list_key, list})
     end
@@ -140,8 +135,6 @@ defmodule Indexed.Actions.CreateView do
 
       asc_key = Indexed.index_key(entity_name, fingerprint, {:asc, field_name})
       desc_key = Indexed.index_key(entity_name, fingerprint, {:desc, field_name})
-
-      Logger.debug("  * Saving #{field_name} index with #{length(sorted_ids)} ids.")
 
       :ets.insert(index.index_ref, {asc_key, sorted_ids})
       :ets.insert(index.index_ref, {desc_key, Enum.reverse(sorted_ids)})

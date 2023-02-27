@@ -4,7 +4,9 @@ defmodule Indexed.Entity do
 
   @typedoc """
   - `fields` : List of `t:field/0`s for which pairs of lists should be
-    maintained with the ID sorted ascending and descending.
+    maintained with the ID sorted ascending and descending. If none, then no
+    such indexes will be maintained and queries will default to
+    `order_hint: nil`, meaning that result ordering is not needed.
   - `id_key` : Specifies how to find the id for a record.  It can be an atom
     field name to access, a function, or a tuple in the form `{module,
     function_name}`. In the latter two cases, the record will be passed in.
@@ -20,16 +22,16 @@ defmodule Indexed.Entity do
       unique values under the prefilter will be managed. These lists can be
       fetched via `Indexed.get_uniques_list/4` and
       `Indexed.get_uniques_map/4`.
-  - `ref` : ETS table reference where records of this entity type are
-    stored, keyed by id. This will be nil in the version compiled into a managed
-    module.
+  - `ref` : ETS table reference where records of
+    this entity type are stored, keyed by id.
+    (`nil` in the instances compiled into a managed module.)
   """
   @type t :: %__MODULE__{
-          fields: [field],
+          fields: [field] | nil,
           id_key: any,
           lookups: [field_name],
           prefilters: [prefilter_config],
-          ref: :ets.tid() | atom | nil
+          ref: Indexed.table_ref() | nil
         }
 
   @typedoc """
