@@ -198,7 +198,7 @@ if Code.ensure_loaded?(Paginator) do
         cursor_before =
           if false == cursor_before and match?([_], acc),
             do:
-              (is_nil(filter) or Enum.any?(read_ids, &filter.(record_getter.(&1)))) &&
+              (is_nil(filter) or Enum.any?(read_ids || [], &filter.(record_getter.(&1)))) &&
                 cursor_for_record(hd(acc), config.cursor_fields),
             else: cursor_before
 
